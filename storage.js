@@ -1,4 +1,6 @@
-import { restoreSession, serializeSession } from './placement.js';
+import { restoreSession, serializeSession, normalizePlannedObstacles } from './placement.js';
+import { normalizeImportedPlayer, normalizeRosterContext } from './players.js';
+import { normalizeFreeLayout } from './free-formation.js';
 
 export const STORAGE_KEY = 'basegrid.workspace.v1';
 export const DEFAULT_DRAFT = { names: '', x: '412', y: '687', spacing: '1' };
@@ -17,10 +19,32 @@ export function loadWorkspace(storage) {
       !Object.keys(DEFAULT_DRAFT).every(key => typeof saved.draft[key] === 'string')) {
     throw new Error('The saved workspace is invalid.');
   }
-  return {
-    draft: saved.draft,
-    session: saved.session === null ? null : restoreSession(saved.session),
-  };
+  const imported = saved.draft.importedPlayers;
+  if (imported !== undefined && (!Array.isArray(imported) || imported.some(player =>
+    !player || typeof player.name !== 'string' || !player.name.trim() ||
+    typeof player.id !== 'string' || !player.id.startsWith('lastwar:')) ||
+    new Set(imported.map(player => player.id)).size !== imported.length)) {
+    throw new Error('The saved imported roster is invalid.');
+  }
+  const ordered = saved.draft.orderedPlayers;
+  if (ordered !== undefined && (!Array.isArray(ordered) || ordered.some(player =>
+    !player || typeof player.name !== 'string' || !player.name.trim() ||
+    typeof player.id !== 'string' || !player.id.trim()) ||
+    new Set(ordered.map(player => player.id)).size !== ordered.length)) {
+    throw new Error('The saved player order is invalid.');
+  }
+  // Upgrade earlier imports that retained rank/HQ metadata without a group field.
+  const draft = { ...saved.draft };
+  if (draft.layout !== undefined) draft.layout = normalizeFreeLayout(draft.layout);
+  if (draft.rosterContext !== undefined) draft.rosterContext = normalizeRosterContext(draft.rosterContext);
+  if (draft.plannedObstacles !== undefined) draft.plannedObstacles = normalizePlannedObstacles(draft.plannedObstacles);
+  if (imported) draft.importedPlayers = imported.map(normalizeImportedPlayer);
+  if (ordered) draft.orderedPlayers = ordered.map(player =>
+    player.id.startsWith('lastwar:') ? normalizeImportedPlayer(player) : player);
+  const session = saved.session === null ? null : restoreSession(saved.session);
+  if (session) session.players = session.players.map(player =>
+    player.id.startsWith('lastwar:') ? normalizeImportedPlayer(player) : player);
+  return { draft, session };
 }
 
 export function clearWorkspace(storage) {

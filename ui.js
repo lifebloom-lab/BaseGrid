@@ -1,11 +1,18 @@
-import { createSession, applyAction, undoLastAction, getProposal, getFormation } from './placement.js';
-import { parseManualPlayers } from './players.js';
+import { createSession, applyAction, undoLastAction, canUndo, getProposal, getFormation, tileToCoordinate } from './placement.js';
+import { parseManualPlayers, playersFromDraft, playerDetails, rosterContextLabels } from './players.js';
+import { tileKey, changeDraftFormation, formationCanvas } from './free-formation.js';
 import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './storage.js';
+import { setupRosterImport } from './import-ui.js';
+import { setupFormationReorder } from './reorder-ui.js';
+import { setupPlacementMessages } from './placement-messages.js';
 
 const byId = id => document.getElementById(id);
 const fields = { names: byId('players'), x: byId('initial-x'), y: byId('initial-y'), spacing: byId('spacing') };
 let draft = { ...DEFAULT_DRAFT };
 let session = null;
+let reorder = null;
+let mapPadding = 1;
+const placementMessages = setupPlacementMessages();
 
 function showMessage(id, message = '') {
   byId(id).textContent = message;
@@ -27,14 +34,16 @@ function persist() {
   }
 }
 
-function sessionFromDraft() {
+function sessionFromDraft(source = draft) {
   // Number('') is zero, so reject blank fields before conversion.
-  if ([draft.x, draft.y, draft.spacing].some(value => !value.trim())) {
+  if ([source.x, source.y, source.spacing].some(value => !value.trim())) {
     throw new Error('Enter initial X, initial Y, and spacing.');
   }
   return createSession({
-    players: parseManualPlayers(draft.names),
-    x0: Number(draft.x), y0: Number(draft.y), spacing: Number(draft.spacing),
+    players: playersFromDraft(source),
+    plannedObstacles: source.plannedObstacles,
+    layout: source.layout,
+    x0: Number(source.x), y0: Number(source.y), spacing: Number(source.spacing),
   });
 }
 
@@ -48,37 +57,79 @@ function element(tag, className, text) {
 }
 
 function renderFormation(plan, preview = false) {
+  reorder?.cancel();
+  const canReorder = preview && Boolean(plan);
+  byId('reorder-help').hidden = !canReorder;
+  byId('obstacle-tools').hidden = !canReorder;
+  byId('add-obstacle').disabled = !canReorder;
   byId('map-empty').hidden = Boolean(plan);
   byId('map-scroll').hidden = !plan;
   const grid = byId('formation-grid');
   grid.replaceChildren();
   if (!plan) {
     byId('grid-size').textContent = 'Awaiting roster';
-    byId('formation-summary').textContent = 'Columns are fixed when placement starts.';
+    byId('formation-summary').textContent = 'Add players to start shaping your formation.';
     return;
   }
   const slots = getFormation(plan);
-  grid.style.setProperty('--columns', plan.columns);
+  const canvas = formationCanvas(plan, slots, preview ? mapPadding : 0);
+  const playersById = new Map(plan.players.map(player => [player.id, player]));
+  const playerNumbers = new Map(plan.players.map((player, index) => [player.id, index + 1]));
+  grid.style.setProperty('--columns', canvas.columns);
+  grid.dataset.minColumn = canvas.minColumn;
+  grid.dataset.minRow = canvas.minRow;
+  grid.dataset.rows = canvas.rows;
   const fragment = document.createDocumentFragment();
-  for (const slot of slots) {
-    const status = preview ? 'pending' : slot.status;
+  for (const slot of canvas.tiles) {
+    const empty = slot.type === 'empty';
+    let coordinates;
+    try { coordinates = tileToCoordinate(plan, slot); } catch { if (empty) continue; throw new Error('Formation coordinates are out of range.'); }
+    const status = empty ? 'empty-slot' : slot.type === 'obstacle' ? 'blocked' : preview ? 'pending' : slot.status;
     const cell = element('li', `slot ${status}`);
-    cell.dataset.slotIndex = slot.slotIndex;
+    cell.dataset.tile = tileKey(slot);
+    cell.dataset.column = slot.column;
+    cell.dataset.row = slot.row;
+    cell.dataset.x = coordinates.x;
+    cell.dataset.y = coordinates.y;
+    cell.dataset.kind = slot.type;
+    cell.style.gridColumn = String(slot.column - canvas.minColumn + 1);
+    cell.style.gridRow = String(slot.row - canvas.minRow + 1);
     if (status === 'current') cell.setAttribute('aria-current', 'step');
     const top = element('div', 'slot-top');
-    top.append(element('span', 'slot-number', String(slot.slotIndex + 1).padStart(2, '0')),
-      element('span', 'slot-state', statusLabels[status]));
-    cell.append(top,
-      element('span', 'slot-name', slot.type === 'obstacle' ? '× Blocked' : slot.name),
-      element('span', 'slot-coordinates', `${slot.x}, ${slot.y}`));
+    top.append(element('span', 'slot-number', empty ? 'OPEN' : slot.type === 'obstacle' ? '×' : String(playerNumbers.get(slot.playerId)).padStart(2, '0')));
+    if (canReorder) {
+      cell.classList.add('slot-reorderable');
+      const handle = element('button', empty ? 'slot-drop' : 'slot-move', empty ? '+' : '⠿');
+      handle.type = 'button';
+      handle.setAttribute('aria-label', `${empty ? 'Empty tile' : `Move ${slot.type === 'obstacle' ? 'obstacle' : slot.name}`}, X ${coordinates.x}, Y ${coordinates.y}`);
+      handle.setAttribute('aria-describedby', 'reorder-help');
+      if (!empty) handle.setAttribute('aria-pressed', 'false');
+      handle.title = empty ? 'Drop a player or obstacle here' : 'Drag to move, or press Space and use the arrow keys';
+      top.append(handle);
+    } else top.append(element('span', 'slot-state', statusLabels[status]));
+    cell.append(top, element('span', 'slot-name', empty ? 'Drop here' : slot.type === 'obstacle' ? '× Blocked' : slot.name));
+    const details = playerDetails(playersById.get(slot.playerId), 'R');
+    if (details) cell.append(element('span', 'player-details', details));
+    if (canReorder && slot.type === 'obstacle') {
+      const remove = element('button', 'text-button obstacle-remove', 'Remove');
+      remove.type = 'button';
+      remove.setAttribute('aria-label', `Remove obstacle at X ${coordinates.x}, Y ${coordinates.y}`);
+      remove.addEventListener('click', () => {
+        if (session) return;
+        if (!editFormation('obstacle', slot, null)) return;
+        byId('add-obstacle').focus({ preventScroll: true });
+        byId('reorder-status').textContent = `Obstacle removed at ${coordinates.x}, ${coordinates.y}.`;
+      });
+      cell.append(remove);
+    }
+    cell.append(element('span', 'slot-coordinates', `${coordinates.x}, ${coordinates.y}`));
     fragment.append(cell);
   }
   grid.append(fragment);
-  const rows = Math.ceil(slots.length / plan.columns);
-  byId('grid-size').textContent = `${plan.columns} ${plan.columns === 1 ? 'column' : 'columns'} × ${rows} ${rows === 1 ? 'row' : 'rows'}`;
-  const blocked = plan.occupants.filter(occupant => occupant.type === 'obstacle').length;
+  byId('grid-size').textContent = `${canvas.columns} columns × ${canvas.rows} rows${preview ? ' · expandable' : ''}`;
+  const blocked = slots.filter(occupant => occupant.type === 'obstacle').length;
   byId('formation-summary').textContent = preview
-    ? 'Preview · Your roster fills each row in order.'
+    ? `Preview · ${blocked ? `${blocked} ${blocked === 1 ? 'blocked tile' : 'blocked tiles'} · ` : ''}Empty tiles stay empty. Drag to shape the formation.`
     : `${plan.playerIndex} placed · ${blocked} ${blocked === 1 ? 'obstacle' : 'obstacles'} · ${plan.players.length - plan.playerIndex} remaining`;
 }
 
@@ -89,15 +140,19 @@ function renderResults() {
   if (!session) return;
   const done = !getProposal(session);
   byId('results-title').textContent = done ? 'Final coordinates' : 'Placement log';
-  byId('results-count').textContent = `${session.occupants.length} occupied slots`;
-  byId('results-empty').hidden = session.occupants.length > 0;
+  const recorded = getFormation(session).filter(slot => slot.status === 'placed' || slot.type === 'obstacle');
+  byId('results-count').textContent = `${recorded.length} occupied slots`;
+  byId('results-empty').hidden = recorded.length > 0;
   const fragment = document.createDocumentFragment();
-  for (const occupant of session.occupants) {
+  const playersById = new Map(session.players.map(player => [player.id, player]));
+  for (const occupant of recorded) {
     const blocked = occupant.type === 'obstacle';
     const row = element('tr', blocked ? 'blocked-row' : '');
-    for (const value of [occupant.slotIndex + 1, blocked ? 'Obstacle' : occupant.name, occupant.x, occupant.y]) {
+    for (const value of [blocked ? '—' : session.players.findIndex(player => player.id === occupant.playerId) + 1, blocked ? 'Obstacle' : occupant.name, occupant.x, occupant.y]) {
       row.append(element('td', '', String(value)));
     }
+    const details = playerDetails(playersById.get(occupant.playerId));
+    if (details) row.children[1].append(element('span', 'player-details', details));
     const status = element('td');
     status.append(element('span', 'status-badge', blocked ? '× Blocked' : '✓ Placed'));
     row.append(status);
@@ -107,6 +162,11 @@ function renderResults() {
 }
 
 function render() {
+  placementMessages.render(session ? getProposal(session) : null);
+  byId('roster-context').hidden = !draft.importedPlayers?.length;
+  const context = rosterContextLabels(draft.rosterContext);
+  byId('roster-server').textContent = context.server;
+  byId('roster-alliance').textContent = context.alliance;
   byId('setup-panel').hidden = Boolean(session);
   byId('placement-panel').hidden = !session;
   if (!session) {
@@ -133,13 +193,14 @@ function render() {
     byId('complete').hidden = Boolean(proposal);
     if (proposal) {
       byId('current-player').textContent = proposal.player.name;
+      showMessage('current-player-details', playerDetails(proposal.player));
       byId('proposed-x').textContent = proposal.x;
       byId('proposed-y').textContent = proposal.y;
     }
-    byId('undo').disabled = session.occupants.length === 0;
+    byId('undo').disabled = !canUndo(session);
     byId('origin-summary').textContent = `${session.origin.x}, ${session.origin.y}`;
     byId('spacing-summary').textContent = `${session.spacing} ${session.spacing === 1 ? 'tile' : 'tiles'} · step ${3 + session.spacing}`;
-    byId('columns-summary').textContent = session.columns;
+    byId('columns-summary').textContent = session.layout ? 'Custom positions' : `${session.columns} columns`;
     renderFormation(session);
   }
   renderResults();
@@ -171,7 +232,7 @@ function takeAction(action) {
 }
 
 byId('setup-form').addEventListener('input', () => {
-  draft = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value]));
+  draft = { ...draft, ...Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value])) };
   showMessage('error');
   persist();
   render();
@@ -220,10 +281,43 @@ byId('reset-dialog').addEventListener('close', () => {
 byId('clear-draft').addEventListener('click', () => {
   draft = { ...DEFAULT_DRAFT };
   session = null;
+  mapPadding = 1;
   for (const [key, input] of Object.entries(fields)) input.value = draft[key];
   clearSavedData();
   showMessage('error');
   render();
+});
+
+function editFormation(kind, from, to) {
+  if (session) return false;
+  try {
+    const plan = sessionFromDraft();
+    const updated = changeDraftFormation(draft, plan, getFormation(plan), kind, from, to);
+    sessionFromDraft(updated); // Validate coordinates before replacing the saved plan.
+    draft = updated;
+    showMessage('error');
+    persist();
+    render();
+    return true;
+  } catch (error) {
+    showMessage('error', error.message);
+    return false;
+  }
+}
+
+byId('expand-map').addEventListener('click', () => {
+  if (session) return;
+  mapPadding++;
+  render();
+  byId('reorder-status').textContent = 'More empty tiles added around the formation.';
+});
+
+reorder = setupFormationReorder({
+  grid: byId('formation-grid'),
+  map: byId('map-scroll'),
+  obstacleTool: byId('add-obstacle'),
+  announce: message => { byId('reorder-status').textContent = message; },
+  onDrop: editFormation,
 });
 
 try {
@@ -234,5 +328,23 @@ try {
   showMessage('notice', 'The saved plan could not be opened. Start a new plan, or clear the saved session.');
 }
 for (const [key, input] of Object.entries(fields)) input.value = draft[key];
+const imported = setupRosterImport({
+  hasRoster: () => parseManualPlayers(draft.names).length > 0,
+  previousPlayers: draft.importedPlayers,
+  previousContext: draft.rosterContext,
+  onImport(players, rosterContext) {
+    if (session) return;
+    draft = { ...draft, names: players.map(player => player.name).join('\n'), importedPlayers: players, orderedPlayers: players, rosterContext };
+    fields.names.value = draft.names;
+    showMessage('error');
+    showMessage('notice', `${players.length} players imported. Review the names and placement order, then start your plan.`);
+    persist();
+    render();
+  },
+});
+if (!draft.rosterContext && imported.previousContext) {
+  draft = { ...draft, rosterContext: imported.previousContext };
+  persist();
+}
 render();
 revealCurrentSlot();

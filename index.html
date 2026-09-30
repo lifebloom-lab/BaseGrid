@@ -18,6 +18,10 @@
   </header>
   <main>
     <div class="page-heading"><div><p class="eyebrow">A LITTLE ORDER ON THE MAP</p><h1>Formation planner<span>.</span></h1></div><p class="base-note">3 × 3 tiles per base</p></div>
+    <section id="roster-context" class="roster-context" aria-label="Imported roster context" hidden>
+      <p class="eyebrow">IMPORTED FROM</p>
+      <dl><div><dt>Server</dt><dd id="roster-server"></dd></div><div><dt>Alliance</dt><dd id="roster-alliance"></dd></div></dl>
+    </section>
     <p id="notice" class="notice" role="status" hidden></p>
     <p id="error" class="error" role="alert" hidden></p>
     <div class="workspace">
@@ -25,6 +29,7 @@
         <section id="setup-panel" class="panel control-panel" aria-labelledby="setup-title">
           <div class="section-label"><span>01</span> THE ROSTER</div>
           <h2 id="setup-title">Set up your formation</h2>
+          <button id="open-import" class="button secondary import-button" type="button">Import players</button>
           <form id="setup-form">
             <div class="label-line"><label for="players">Player names</label><span id="player-count">0 players</span></div>
             <textarea id="players" name="players" rows="6" placeholder="Gaby&#10;Mbac&#10;Lance&#10;Oshyn" aria-describedby="players-help" required></textarea>
@@ -33,7 +38,7 @@
             <div class="coordinate-inputs">
               <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" required></div>
               <div><label for="initial-y">Initial Y</label><input id="initial-y" name="y" type="number" step="1" value="687" required></div>
-              <div><label for="spacing">Spacing p</label><input id="spacing" name="spacing" type="number" min="0" step="1" value="1" required></div>
+              <div><label for="spacing">Spacing</label><input id="spacing" name="spacing" type="number" min="0" step="1" value="1" required></div>
             </div>
             <p id="spacing-help" class="field-help">1 tile between bases · 4-coordinate step</p>
             <button class="button primary start-button" type="submit">Start placement</button>
@@ -47,6 +52,7 @@
           <progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress>
           <div id="proposal" class="proposal" aria-live="polite" aria-atomic="true">
             <p class="field-help">Player</p><h3 id="current-player"></h3>
+            <p id="current-player-details" class="player-details" hidden></p>
             <p class="proposal-label">Proposed position</p>
             <div class="proposed-coordinates"><div><span>X</span><strong id="proposed-x"></strong></div><div><span>Y</span><strong id="proposed-y"></strong></div></div>
           </div>
@@ -54,28 +60,108 @@
           <p class="action-help">Blocked? Skip this slot and keep the same player.</p>
           <div id="complete" class="complete" role="status" hidden><span class="complete-icon" aria-hidden="true">✓</span><h3>Everyone has a place.</h3><p>All players are placed. Your final coordinates are below the formation.</p></div>
           <div class="session-tools"><button id="undo" class="button secondary" type="button">↶ Undo last action</button><button id="reset" class="text-button" type="button">Reset</button></div>
-          <dl class="session-settings"><div><dt>Origin</dt><dd id="origin-summary"></dd></div><div><dt>Spacing</dt><dd id="spacing-summary"></dd></div><div><dt>Fixed columns</dt><dd id="columns-summary"></dd></div></dl>
+          <dl class="session-settings"><div><dt>Origin</dt><dd id="origin-summary"></dd></div><div><dt>Spacing</dt><dd id="spacing-summary"></dd></div><div><dt>Formation</dt><dd id="columns-summary"></dd></div></dl>
         </section>
         <p class="device-note">Your plan stays in this browser, including after a refresh.</p>
       </aside>
 
       <div class="formation-column">
+        <section id="player-message-panel" class="panel player-message-panel" aria-labelledby="player-message-title" hidden>
+          <div class="message-heading"><div><p class="eyebrow">READY TO SHARE</p><h2 id="player-message-title">Message to player</h2></div><span id="message-recipient"></span></div>
+          <fieldset class="message-language-picker">
+            <legend>Message language <span id="message-language-name"></span></legend>
+            <div id="message-languages" class="message-languages"></div>
+          </fieldset>
+          <label for="player-message" class="sr-only">Suggested placement message</label>
+          <textarea id="player-message" class="player-message" rows="3" readonly spellcheck="false" aria-describedby="player-message-help"></textarea>
+          <div class="message-actions"><button id="copy-player-message" class="button primary" type="button">Copy message</button><p id="player-message-help" class="field-help">Copy, then paste into your chat with the player.</p></div>
+          <p id="message-copy-status" class="field-help" role="status" aria-live="polite" aria-atomic="true"></p>
+        </section>
         <section class="panel formation-panel" aria-labelledby="formation-title">
           <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><span id="grid-size" class="grid-size">Awaiting roster</span></div>
           <div class="legend" aria-label="Slot legend"><span><i class="legend-placed"></i>Placed</span><span><i class="legend-current"></i>Current</span><span><i class="legend-blocked"></i>Obstacle</span><span><i class="legend-pending"></i>Upcoming</span></div>
+          <div id="obstacle-tools" class="obstacle-tools" hidden><button id="add-obstacle" class="button obstacle-button obstacle-tool" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle</button><button id="expand-map" class="button secondary" type="button">＋ More space</button><span>Drag an obstacle, or click then choose a tile.</span></div>
+          <p id="reorder-help" class="reorder-help" hidden>Drag players onto empty tiles in any direction. Drop onto a player to swap positions. Gaps stay empty.<span>The map grows after each move. More space adds room on every side. Touch: drag the ⠿ handle. Keyboard: focus a handle or Obstacle, press Space, use arrow keys, then Space to drop. Escape cancels. Placement follows the roster order at your chosen positions.</span></p>
+          <p id="reorder-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
           <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster to preview the formation.<br>Players fill each row from left to right.</p></div>
           <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
-          <div class="map-footer"><span id="formation-summary">Columns are fixed when placement starts.</span><span class="map-orientation">X → <span aria-hidden="true">/</span> Y ↓</span></div>
+          <div class="map-footer"><span id="formation-summary">Add players to start shaping your formation.</span><span class="map-orientation">X → <span aria-hidden="true">/</span> Y ↓</span></div>
         </section>
         <section id="results-panel" class="panel results-panel" aria-labelledby="results-title" hidden>
           <div class="results-heading"><h2 id="results-title">Placement log</h2><span id="results-count"></span></div>
-          <div class="table-scroll" tabindex="0" role="region" aria-label="Placement coordinates"><table><caption class="sr-only">Confirmed player positions and obstacle coordinates, in slot order</caption><thead><tr><th scope="col">Slot</th><th scope="col">Occupant</th><th scope="col">X</th><th scope="col">Y</th><th scope="col">Status</th></tr></thead><tbody id="results-body"></tbody></table></div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Placement coordinates"><table><caption class="sr-only">Confirmed player positions and obstacle coordinates</caption><thead><tr><th scope="col">Player #</th><th scope="col">Occupant</th><th scope="col">X</th><th scope="col">Y</th><th scope="col">Status</th></tr></thead><tbody id="results-body"></tbody></table></div>
           <p id="results-empty" class="results-empty">Confirmed placements and obstacles will appear here.</p>
         </section>
       </div>
     </div>
-    <footer class="page-footer"><span>BASEGRID <span class="footer-divider">/</span> BUILT FOR YOUR ALLIANCE</span><span>Manual planning · No game connection</span></footer>
+    <footer class="page-footer"><span>BASEGRID <span class="footer-divider">/</span> BUILT FOR YOUR ALLIANCE</span><span>Manual placement · Optional roster import</span></footer>
   </main>
+  <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title" aria-describedby="import-description">
+    <p class="eyebrow">ALLIANCE ROSTER</p>
+    <h2 id="import-title">Import players</h2>
+    <p id="import-description">Reuse a saved roster or find your alliance. Saved data uses no API calls.</p>
+    <form id="import-form" novalidate>
+      <div id="saved-rosters" class="import-field" hidden>
+        <label for="saved-roster">Saved roster</label>
+        <select id="saved-roster"></select>
+        <p class="field-help">Kept in this browser, even when you reset or clear a formation.</p>
+      </div>
+      <p id="import-cache-warning" class="notice" role="status" hidden></p>
+      <details id="import-lookup" class="import-direct" open>
+        <summary>Find another alliance or refresh data</summary>
+      <div class="import-field">
+        <label for="import-key">LastWarTools API key</label>
+        <input id="import-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="import-key-help" autofocus>
+        <p id="import-key-help" class="field-help">Sent to LastWarTools only for these lookups; never saved by BaseGrid. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key</a>.</p>
+      </div>
+      <div class="import-search">
+        <div class="import-field">
+          <label for="import-server">Server number</label>
+          <input id="import-server" type="number" inputmode="numeric" min="1" max="9999999999" step="1" placeholder="e.g. 1234" required>
+        </div>
+        <button id="find-alliances" class="button secondary" type="submit">Find alliances</button>
+      </div>
+      <div id="import-selection" class="import-field" hidden>
+        <label for="import-alliance">Alliance</label>
+        <select id="import-alliance"><option value="">Choose an alliance…</option></select>
+        <p class="field-help">Showing up to 200 ranked alliances on this server.</p>
+        <p id="alliance-cache-status" class="field-help" role="status" hidden></p>
+        <button id="refresh-alliances" class="text-button" type="button">Refresh alliances · 1 API call</button>
+      </div>
+      <details id="import-direct" class="import-direct">
+        <summary>Have an alliance ID instead?</summary>
+        <div class="import-field">
+          <label for="import-alliance-id">Alliance ID</label>
+          <input id="import-alliance-id" type="text" autocomplete="off" spellcheck="false" maxlength="32" aria-describedby="import-id-help">
+          <p id="import-id-help" class="field-help">The 32-character ID from LastWarTools. Useful if your alliance is missing from the rankings.</p>
+        </div>
+      </details>
+      <button id="load-roster" class="button primary" type="button" disabled>Load players</button>
+      <p class="field-help">Lookups use saved results first. New lookups use 1 API call each.</p>
+      </details>
+      <p id="import-status" class="import-status" role="status" hidden></p>
+      <p id="import-error" class="error" role="alert" hidden></p>
+      <section id="import-preview" class="import-preview" aria-labelledby="import-preview-title" hidden>
+        <h3 id="import-preview-title" tabindex="-1">Review players</h3>
+        <p id="import-roster-context" class="import-roster-context"></p>
+        <p id="roster-cache-status" class="field-help" role="status"></p>
+        <button id="refresh-roster" class="text-button" type="button">Refresh players · 1 API call</button>
+        <div class="import-field">
+          <label for="import-order">Placement order</label>
+          <select id="import-order"><option value="power">Power · highest first</option><option value="name">Name · A–Z</option></select>
+        </div>
+        <ol id="import-preview-list" class="import-preview-list" tabindex="0" aria-label="Players in placement order"></ol>
+        <p class="field-help">HQ levels and groups stay with each player in your plan. Group numbers come from LastWarTools and may differ from the R1–R5 labels in game.</p>
+        <p id="import-metadata-note" class="field-help" role="status" hidden></p>
+        <p id="import-replace-note" class="field-help"></p>
+        <button id="confirm-import" class="button primary" type="button" disabled>Use these players</button>
+      </section>
+      <div class="import-dialog-footer">
+        <span>Independent community API.<br>Lookups use your API allowance.</span>
+        <button id="cancel-import" class="button secondary" type="button">Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description"><h2 id="reset-title">Clear this formation?</h2><p id="reset-description">This removes the saved session and all placements. Your roster and starting point will stay in the form for a new plan.</p><form method="dialog"><button class="button secondary" value="cancel" autofocus>Keep planning</button><button class="button reset-confirm" value="reset">Reset formation</button></form></dialog>
   <noscript><p class="notice">Enable JavaScript to use the placement planner.</p></noscript>
 </body>
