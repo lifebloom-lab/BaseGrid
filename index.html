@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10191c">
+  <meta name="description" content="Plan aligned Last War alliance bases, work around obstacles, and keep every player's coordinates in one place.">
+  <title>BaseGrid · Alliance planner</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310191c'/%3E%3Cpath fill='%2395e5bf' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6z'/%3E%3Cpath fill='%23d6a970' d='M18 18h8v8h-8z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./ui.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="BaseGrid home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>BaseGrid</a>
+    <span class="header-caption">LAST WAR <span>/</span> ALLIANCE PLANNER</span>
+    <span id="save-status" class="save-status" role="status">Saved on this device</span>
+  </header>
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">A LITTLE ORDER ON THE MAP</p><h1>Formation planner<span>.</span></h1></div><p class="base-note">3 × 3 tiles per base</p></div>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <p id="error" class="error" role="alert" hidden></p>
+    <div class="workspace">
+      <aside class="controls">
+        <section id="setup-panel" class="panel control-panel" aria-labelledby="setup-title">
+          <div class="section-label"><span>01</span> THE ROSTER</div>
+          <h2 id="setup-title">Set up your formation</h2>
+          <form id="setup-form">
+            <div class="label-line"><label for="players">Player names</label><span id="player-count">0 players</span></div>
+            <textarea id="players" name="players" rows="6" placeholder="Gaby&#10;Mbac&#10;Lance&#10;Oshyn" aria-describedby="players-help" required></textarea>
+            <p id="players-help" class="field-help">One name per line, in placement order.</p>
+            <div class="section-label coordinates-label"><span>02</span> THE STARTING POINT</div>
+            <div class="coordinate-inputs">
+              <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" required></div>
+              <div><label for="initial-y">Initial Y</label><input id="initial-y" name="y" type="number" step="1" value="687" required></div>
+              <div><label for="spacing">Spacing p</label><input id="spacing" name="spacing" type="number" min="0" step="1" value="1" required></div>
+            </div>
+            <p id="spacing-help" class="field-help">1 tile between bases · 4-coordinate step</p>
+            <button class="button primary start-button" type="submit">Start placement</button>
+          </form>
+          <button id="clear-draft" class="text-button" type="button">Clear saved session</button>
+        </section>
+
+        <section id="placement-panel" class="panel control-panel" aria-labelledby="placement-title" hidden>
+          <div class="section-label"><span class="live-dot"></span> PLACEMENT IN PROGRESS</div>
+          <div class="progress-label"><h2 id="placement-title">Next up</h2><span id="placement-count"></span></div>
+          <progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress>
+          <div id="proposal" class="proposal" aria-live="polite" aria-atomic="true">
+            <p class="field-help">Player</p><h3 id="current-player"></h3>
+            <p class="proposal-label">Proposed position</p>
+            <div class="proposed-coordinates"><div><span>X</span><strong id="proposed-x"></strong></div><div><span>Y</span><strong id="proposed-y"></strong></div></div>
+          </div>
+          <div class="placement-actions"><button id="placed" class="button primary" type="button"><span aria-hidden="true">✓</span> Placed</button><button id="obstacle" class="button obstacle-button" type="button"><span aria-hidden="true">✕</span> Obstacle</button></div>
+          <p class="action-help">Blocked? Skip this slot and keep the same player.</p>
+          <div id="complete" class="complete" role="status" hidden><span class="complete-icon" aria-hidden="true">✓</span><h3>Everyone has a place.</h3><p>All players are placed. Your final coordinates are below the formation.</p></div>
+          <div class="session-tools"><button id="undo" class="button secondary" type="button">↶ Undo last action</button><button id="reset" class="text-button" type="button">Reset</button></div>
+          <dl class="session-settings"><div><dt>Origin</dt><dd id="origin-summary"></dd></div><div><dt>Spacing</dt><dd id="spacing-summary"></dd></div><div><dt>Fixed columns</dt><dd id="columns-summary"></dd></div></dl>
+        </section>
+        <p class="device-note">Your plan stays in this browser, including after a refresh.</p>
+      </aside>
+
+      <div class="formation-column">
+        <section class="panel formation-panel" aria-labelledby="formation-title">
+          <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><span id="grid-size" class="grid-size">Awaiting roster</span></div>
+          <div class="legend" aria-label="Slot legend"><span><i class="legend-placed"></i>Placed</span><span><i class="legend-current"></i>Current</span><span><i class="legend-blocked"></i>Obstacle</span><span><i class="legend-pending"></i>Upcoming</span></div>
+          <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster to preview the formation.<br>Players fill each row from left to right.</p></div>
+          <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
+          <div class="map-footer"><span id="formation-summary">Columns are fixed when placement starts.</span><span class="map-orientation">X → <span aria-hidden="true">/</span> Y ↓</span></div>
+        </section>
+        <section id="results-panel" class="panel results-panel" aria-labelledby="results-title" hidden>
+          <div class="results-heading"><h2 id="results-title">Placement log</h2><span id="results-count"></span></div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Placement coordinates"><table><caption class="sr-only">Confirmed player positions and obstacle coordinates, in slot order</caption><thead><tr><th scope="col">Slot</th><th scope="col">Occupant</th><th scope="col">X</th><th scope="col">Y</th><th scope="col">Status</th></tr></thead><tbody id="results-body"></tbody></table></div>
+          <p id="results-empty" class="results-empty">Confirmed placements and obstacles will appear here.</p>
+        </section>
+      </div>
+    </div>
+    <footer class="page-footer"><span>BASEGRID <span class="footer-divider">/</span> BUILT FOR YOUR ALLIANCE</span><span>Manual planning · No game connection</span></footer>
+  </main>
+  <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description"><h2 id="reset-title">Clear this formation?</h2><p id="reset-description">This removes the saved session and all placements. Your roster and starting point will stay in the form for a new plan.</p><form method="dialog"><button class="button secondary" value="cancel" autofocus>Keep planning</button><button class="button reset-confirm" value="reset">Reset formation</button></form></dialog>
+  <noscript><p class="notice">Enable JavaScript to use the placement planner.</p></noscript>
+</body>
+</html>
