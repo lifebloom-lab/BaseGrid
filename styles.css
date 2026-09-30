@@ -449,6 +449,32 @@ input:focus,textarea:focus {
   border-color:#83bd9a!important;
 }
 
+.placement-overview { padding:18px 25px 0; }
+.placement-overview p { margin:0; color:var(--muted); font-size:.875rem; line-height:1.5; }
+.placement-overview progress { margin-top:12px; }
+.legend-progress { background:#715731; border-color:var(--amber)!important; }
+.slot.in-progress { border:1px solid #a0804c; background:#352f23; }
+.slot.in-progress .slot-state { color:#f2cc8c; font-size:.75rem; }
+.slot.selected { outline:2px solid var(--mint); outline-offset:3px; }
+.tile-action { border:1px solid #617e70; background:#283f35; color:var(--mint); border-radius:5px; min-height:36px; padding:7px 10px; font-size:.8125rem; cursor:pointer; }
+.tile-action:hover { background:#365442; }
+.slot.placed .tile-action { background:transparent; }
+.selected-coordinates { margin:18px 0; }
+.confirm-placement { border-top:1px solid var(--line); margin-top:20px; padding-top:12px; }
+.confirm-placement .primary, #undo-confirmation { width:100%; }
+.confirm-placement .text-button { display:block; margin:auto; }
+.player-message-panel h2 { overflow-wrap:anywhere; }
+.player-message-panel .message-heading { gap:4px; }
+.player-message-panel .message-heading .eyebrow { margin:0; }
+.player-message-panel .message-heading .text-button { padding:8px 0; font-size:.75rem; }
+.player-message-panel .message-languages { gap:5px; }
+.player-message-panel .message-actions .button { width:100%; }
+.player-message-panel .player-message { font-size:.875rem; }
+#message-changed { font-size:.8125rem; padding:10px 12px; margin:16px 0; }
+.setup-tools { display:flex; flex-wrap:wrap; justify-content:center; gap:0 12px; margin-top:10px; }
+.setup-tools #clear-draft { margin:0; }
+@media(max-width:1000px) { .placement-overview { padding-left:21px; padding-right:21px; } }
+
 .legend-current {
   background:var(--mint);
   border-color:var(--mint)!important;

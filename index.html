@@ -26,14 +26,31 @@
     <p id="error" class="error" role="alert" hidden></p>
     <div class="workspace">
       <aside class="controls">
+        <section id="player-message-panel" class="panel player-message-panel" aria-labelledby="player-message-title" hidden>
+          <div class="message-heading"><p id="selected-status" class="eyebrow">IN PROGRESS</p><button id="close-placement" class="text-button" type="button">Back to setup</button></div>
+          <h2 id="player-message-title" tabindex="-1"></h2>
+          <p id="selected-details" class="player-details"></p>
+          <p id="message-recipient" class="sr-only"></p>
+          <div class="proposed-coordinates selected-coordinates"><div><span>X</span><strong id="selected-x"></strong></div><div><span>Y</span><strong id="selected-y"></strong></div></div>
+          <div id="message-compose">
+            <p id="message-changed" class="notice" role="status" hidden>Coordinates changed—copy the updated message.</p>
+            <fieldset class="message-language-picker"><legend>Message language <span id="message-language-name"></span></legend><div id="message-languages" class="message-languages"></div></fieldset>
+            <label for="player-message" class="sr-only">Suggested placement message</label>
+            <textarea id="player-message" class="player-message" rows="5" readonly spellcheck="false" aria-describedby="player-message-help"></textarea>
+            <div class="message-actions"><button id="copy-player-message" class="button secondary" type="button">Copy message</button><p id="player-message-help" class="field-help">Paste into your chat with the player.</p></div>
+            <p id="message-copy-status" class="field-help" role="status" aria-live="polite" aria-atomic="true"></p>
+            <div class="confirm-placement"><p class="field-help">Once you see the player at these coordinates, confirm their arrival.</p><button id="confirm-placement" class="button primary" type="button">✓ Player has moved here</button><button id="cancel-placement" class="text-button" type="button">Back to planned</button></div>
+          </div>
+          <div id="confirmed-details" hidden><p class="field-help">Position confirmed and locked. Other bases can still be moved.</p><button id="undo-confirmation" class="button secondary" type="button">Undo confirmation</button></div>
+        </section>
         <section id="setup-panel" class="panel control-panel" aria-labelledby="setup-title">
           <div class="section-label"><span>01</span> THE ROSTER</div>
-          <h2 id="setup-title">Set up your formation</h2>
+          <h2 id="setup-title" tabindex="-1">Set up your formation</h2>
           <button id="open-import" class="button secondary import-button" type="button">Import players</button>
           <form id="setup-form">
             <div class="label-line"><label for="players">Player names</label><span id="player-count">0 players</span></div>
-            <textarea id="players" name="players" rows="6" placeholder="Gaby&#10;Mbac&#10;Lance&#10;Oshyn" aria-describedby="players-help" required></textarea>
-            <p id="players-help" class="field-help">One name per line, in placement order.</p>
+            <textarea id="players" name="players" rows="6" placeholder="Enter player names, one per line…" aria-describedby="players-help" required></textarea>
+            <p id="players-help" class="field-help">One name per line. Place players in any order from their tiles.</p>
             <div class="section-label coordinates-label"><span>02</span> THE STARTING POINT</div>
             <div class="coordinate-inputs">
               <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" required></div>
@@ -41,47 +58,20 @@
               <div><label for="spacing">Spacing</label><input id="spacing" name="spacing" type="number" min="0" step="1" value="1" required></div>
             </div>
             <p id="spacing-help" class="field-help">1 tile between bases · 4-coordinate step</p>
-            <button class="button primary start-button" type="submit">Start placement</button>
+            <p id="settings-lock-help" class="field-help" hidden>Roster, starting point, and spacing are locked while bases are confirmed. Undo confirmations to change them.</p>
           </form>
-          <button id="clear-draft" class="text-button" type="button">Clear saved session</button>
-        </section>
-
-        <section id="placement-panel" class="panel control-panel" aria-labelledby="placement-title" hidden>
-          <div class="section-label"><span class="live-dot"></span> PLACEMENT IN PROGRESS</div>
-          <div class="progress-label"><h2 id="placement-title">Next up</h2><span id="placement-count"></span></div>
-          <progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress>
-          <div id="proposal" class="proposal" aria-live="polite" aria-atomic="true">
-            <p class="field-help">Player</p><h3 id="current-player"></h3>
-            <p id="current-player-details" class="player-details" hidden></p>
-            <p class="proposal-label">Proposed position</p>
-            <div class="proposed-coordinates"><div><span>X</span><strong id="proposed-x"></strong></div><div><span>Y</span><strong id="proposed-y"></strong></div></div>
-          </div>
-          <div class="placement-actions"><button id="placed" class="button primary" type="button"><span aria-hidden="true">✓</span> Placed</button><button id="obstacle" class="button obstacle-button" type="button"><span aria-hidden="true">✕</span> Obstacle</button></div>
-          <p class="action-help">Blocked? Skip this slot and keep the same player.</p>
-          <div id="complete" class="complete" role="status" hidden><span class="complete-icon" aria-hidden="true">✓</span><h3>Everyone has a place.</h3><p>All players are placed. Your final coordinates are below the formation.</p></div>
-          <div class="session-tools"><button id="undo" class="button secondary" type="button">↶ Undo last action</button><button id="reset" class="text-button" type="button">Reset</button></div>
-          <dl class="session-settings"><div><dt>Origin</dt><dd id="origin-summary"></dd></div><div><dt>Spacing</dt><dd id="spacing-summary"></dd></div><div><dt>Formation</dt><dd id="columns-summary"></dd></div></dl>
+          <div class="setup-tools"><button id="reset-progress" class="text-button" type="button" hidden>Reset placement progress</button><button id="clear-draft" class="text-button" type="button">Clear formation</button></div>
         </section>
         <p class="device-note">Your plan stays in this browser, including after a refresh.</p>
       </aside>
 
       <div class="formation-column">
-        <section id="player-message-panel" class="panel player-message-panel" aria-labelledby="player-message-title" hidden>
-          <div class="message-heading"><div><p class="eyebrow">READY TO SHARE</p><h2 id="player-message-title">Message to player</h2></div><span id="message-recipient"></span></div>
-          <fieldset class="message-language-picker">
-            <legend>Message language <span id="message-language-name"></span></legend>
-            <div id="message-languages" class="message-languages"></div>
-          </fieldset>
-          <label for="player-message" class="sr-only">Suggested placement message</label>
-          <textarea id="player-message" class="player-message" rows="3" readonly spellcheck="false" aria-describedby="player-message-help"></textarea>
-          <div class="message-actions"><button id="copy-player-message" class="button primary" type="button">Copy message</button><p id="player-message-help" class="field-help">Copy, then paste into your chat with the player.</p></div>
-          <p id="message-copy-status" class="field-help" role="status" aria-live="polite" aria-atomic="true"></p>
-        </section>
         <section class="panel formation-panel" aria-labelledby="formation-title">
           <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><span id="grid-size" class="grid-size">Awaiting roster</span></div>
-          <div class="legend" aria-label="Slot legend"><span><i class="legend-placed"></i>Placed</span><span><i class="legend-current"></i>Current</span><span><i class="legend-blocked"></i>Obstacle</span><span><i class="legend-pending"></i>Upcoming</span></div>
+          <div class="placement-overview"><p id="placement-count" role="status">0 placed · 0 in progress · 0 remaining</p><progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress></div>
+          <div class="legend" aria-label="Slot legend"><span><i class="legend-pending"></i>Planned</span><span><i class="legend-progress"></i>In progress</span><span><i class="legend-placed"></i>Placed</span><span><i class="legend-blocked"></i>Obstacle</span></div>
           <div id="obstacle-tools" class="obstacle-tools" hidden><button id="add-obstacle" class="button obstacle-button obstacle-tool" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle</button><button id="expand-map" class="button secondary" type="button">＋ More space</button><span>Drag an obstacle, or click then choose a tile.</span></div>
-          <p id="reorder-help" class="reorder-help" hidden>Drag players onto empty tiles in any direction. Drop onto a player to swap positions. Gaps stay empty.<span>The map grows after each move. More space adds room on every side. Touch: drag the ⠿ handle. Keyboard: focus a handle or Obstacle, press Space, use arrow keys, then Space to drop. Escape cancels. Placement follows the roster order at your chosen positions.</span></p>
+          <p id="reorder-help" class="reorder-help" hidden>Choose Place on any player. Keep dragging unconfirmed bases to shape the formation.<span>Drop onto another unconfirmed player to swap. Gaps stay empty. Touch: drag ⠿. Keyboard: focus a handle or Obstacle, press Space, use arrow keys, then Space to drop. Escape cancels. More space extends the map.</span></p>
           <p id="reorder-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
           <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster to preview the formation.<br>Players fill each row from left to right.</p></div>
           <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>

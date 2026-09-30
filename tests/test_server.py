@@ -77,7 +77,9 @@ class ServerTests(unittest.TestCase):
             return response.status, response.headers, response.read()
 
     def test_allowed_app_assets_and_private_files(self):
-        for path in ['/', '/ui.js', '/import-ui.js', '/lastwar-api.js', '/roster-cache.js', '/reorder-ui.js']:
+        for path in ['/', '/ui.js', '/import-ui.js', '/lastwar-api.js', '/roster-cache.js', '/reorder-ui.js',
+                     '/tile-placement.js', '/placement-messages.js', '/free-formation.js', '/placement.js',
+                     '/players.js', '/storage.js', '/styles.css']:
             self.assertEqual(self.get(path)[0], 200)
         for path in ['/.git/config', '/.env', '/server.py', '/tests/', '/../.git/config']:
             self.assertEqual(self.get(path)[0], 404)

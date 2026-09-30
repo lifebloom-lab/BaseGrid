@@ -23,7 +23,7 @@ const templates = {
 export const MESSAGE_LANGUAGE_KEY = 'basegrid.message-language.v1';
 const supportedLanguage = value => MESSAGE_LANGUAGES.some(language => language.id === value) ? value : 'en';
 
-/** Use the engine's current proposal, including any skipped obstacles. */
+/** Use the selected player's current coordinates. */
 export function formatPlacementMessage(proposal, language = 'en') {
   if (!proposal) return '';
   return templates[supportedLanguage(language)](proposal.player.name, proposal.x, proposal.y);
@@ -38,7 +38,7 @@ export function saveMessageLanguage(storage, language) {
   storage.setItem(MESSAGE_LANGUAGE_KEY, supportedLanguage(language));
 }
 
-export function setupPlacementMessages() {
+export function setupPlacementMessages({ onCopy = () => {} } = {}) {
   const panel = document.getElementById('player-message-panel');
   const picker = document.getElementById('message-languages');
   const message = document.getElementById('player-message');
@@ -48,6 +48,7 @@ export function setupPlacementMessages() {
   try { language = loadMessageLanguage(window.localStorage); } catch { /* Storage can be disabled. */ }
   let proposal = null;
   let revision = 0;
+  let fingerprint = '';
 
   const buttons = MESSAGE_LANGUAGES.map(option => {
     const button = document.createElement('button');
@@ -72,11 +73,15 @@ export function setupPlacementMessages() {
 
   function render(nextProposal) {
     proposal = nextProposal;
-    revision++;
+    const nextFingerprint = JSON.stringify([proposal?.player.id, proposal?.player.name, proposal?.x, proposal?.y, language]);
+    if (fingerprint !== nextFingerprint) {
+      fingerprint = nextFingerprint;
+      revision++;
+      copy.disabled = !proposal;
+      copy.textContent = 'Copy message';
+      status.textContent = '';
+    }
     panel.hidden = !proposal;
-    copy.disabled = !proposal;
-    copy.textContent = 'Copy message';
-    status.textContent = '';
     message.value = formatPlacementMessage(proposal, language);
     message.lang = language;
     document.getElementById('message-recipient').textContent = proposal ? `For ${proposal.player.name}` : '';
@@ -89,10 +94,13 @@ export function setupPlacementMessages() {
     if (!proposal || copy.disabled) return;
     const currentRevision = revision;
     const text = message.value;
+    const copiedProposal = proposal;
+    const copiedLanguage = language;
     copy.disabled = true;
     status.textContent = '';
     try {
       await navigator.clipboard.writeText(text);
+      onCopy(copiedProposal, copiedLanguage);
       // A language change or placement action may happen while permission is pending.
       if (currentRevision !== revision) return;
       copy.textContent = 'Copied!';
@@ -104,6 +112,16 @@ export function setupPlacementMessages() {
       status.textContent = 'Copy is unavailable here. The message is selected: use your device’s Copy command, then paste it into chat.';
     } finally {
       if (currentRevision === revision) copy.disabled = false;
+    }
+  });
+
+  // Also track a full manual copy when clipboard permission is unavailable.
+  message.addEventListener('copy', () => {
+    if (proposal && message.selectionStart === 0 && message.selectionEnd === message.value.length) {
+      const copiedProposal = proposal;
+      const copiedLanguage = language;
+      // Let the browser copy the selection before rendering can change it.
+      setTimeout(() => onCopy(copiedProposal, copiedLanguage), 0);
     }
   });
 

@@ -18,22 +18,23 @@ To use the app on a phone on the same trusted Wi-Fi network, run `python3 server
 
 ## Use
 
-1. Enter names in placement order, one per line, an origin X/Y, and spacing `p`.
-   Before starting, drag any preview box onto an empty tile, including beyond the original rectangle on any side. The player keeps that position and leaves a gap behind. Dropping onto another player swaps their positions. A new empty border appears after each move; **＋ More space** extends the available map on every side. On touch screens, drag the ⠿ handle; the rest of the card still allows scrolling. With a keyboard, focus a handle, press Space or Enter to pick it up, use arrows (or Home/End), then Space or Enter to drop. Escape cancels. Dropping outside the map cancels the move.
-2. Start placement. **Placed** confirms that player's slot. **Obstacle** records a blocked slot and proposes the next position to the same player.
-3. **Undo last action** reverses either action, including after completion or a refresh. Repeat to undo further.
-4. The map distinguishes placed, blocked, current, and upcoming slots. Wide maps scroll horizontally without changing column alignment. The log includes all confirmed coordinates and marked obstacles.
-5. **Reset** clears the saved session after confirmation and retains the setup fields on screen. **Clear saved session** on the setup screen also clears those fields.
+1. Enter player names, one per line, plus initial X/Y and spacing, or import a saved alliance roster.
+2. Drag bases to shape the formation. Drop onto another unconfirmed player to swap positions. Empty tiles stay empty, including outside the original rectangle. **＋ More space** extends the map.
+3. Choose **Place** on any player's tile. The side panel shows their coordinates and a suggested message. Select a language flag, then **Copy message** and paste it into your chat.
+4. When the player actually arrives, select **Player has moved here**. Their tile becomes green and locks. Other bases remain movable.
+5. Use **Continue** for a player in progress, or **View** on a placed base to review it and **Undo confirmation**. Several players can be in progress at once.
 
-During placement, **Message to player** suggests a message containing the current player's name and proposed X/Y coordinates. Choose a small flag for English, Spanish, Brazilian Portuguese, French, Korean, German, Japanese, or Simplified Chinese, then **Copy message** and paste it into your own chat. Language names are available to screen readers and on hover; the selected name appears above the flags. Messages update with placement, obstacle skips, and undo. Copying does not mark the player as placed or send anything. If clipboard access is unavailable, the message is selected for manual copying.
+Planned tiles are neutral, in-progress tiles are amber, and confirmed tiles are green. The counts above the map track each state. Copying does not confirm a placement or send a message. If you move a base after copying its message, the tile and side panel remind you to copy the updated coordinates. Swaps update both affected players.
 
-Translations are built in and require no API calls. Your chosen message language is saved separately in this browser, so reloads and resetting or clearing a plan retain it. Older workspaces default to English. The planner interface itself stays in English.
+Messages support English, Spanish, Brazilian Portuguese, French, Korean, German, Japanese, and Simplified Chinese. Language names appear on hover and are available to screen readers. Translations are built in and use no API calls. The selected language persists separately from the plan. If clipboard access is unavailable, select and copy the message manually.
 
-Moving players updates their coordinates immediately and saves the draft locally, including player IDs, HQ levels, and groups. Players with identical names retain their distinct records. It uses no API calls and does not alter the saved source roster. Position editing is available before placement starts; placement follows the names list while respecting each player's chosen position. Edit the names list to change the processing order. New players fill free default positions, while matched players keep their saved positions.
+On touch screens, drag the ⠿ handle; the rest of each card allows scrolling. With a keyboard, focus a handle, press Space or Enter, use arrow keys (or Home/End), then Space or Enter to drop. Escape or dropping outside the map cancels. Confirmed tiles cannot be moved or used as drop destinations.
 
-To reserve a blocked tile before starting, drag **✕ Obstacle** onto an empty or player tile, or click/tap **✕ Obstacle** and then choose the tile. If a player occupies the target, that player moves to a free position while other assignments stay fixed. Moving an existing obstacle onto a player swaps their positions. Obstacles can be placed outside the original rectangle and removed using **Remove**. The same keyboard pickup/arrow/drop controls work for obstacles. Dropping outside the map or pressing Escape cancels. Positions are saved with the local plan without API calls.
+Drag **✕ Obstacle** onto an empty or unconfirmed player tile, or click it and then choose a tile. A player at the target moves to a free position; moving an existing obstacle onto a player swaps them. Other assignments stay fixed. Obstacles can extend beyond the original rectangle and be removed using **Remove**. Keyboard movement also works for obstacles.
 
-When placement starts, preplanned obstacles are avoided and included in the map and coordinate log. **Obstacle** during placement handles newly discovered blocks. In a custom formation, it proposes the next free position for the affected player without taking another player's reserved tile; other assignments and intentional gaps remain. **Undo last action** reverses the last placement or block and restores its proposal. Reset returns to the editable preview. Chosen grid positions are relative to the origin and spacing; changing those setup values changes their game coordinates.
+**Back to setup** closes the player panel without changing their status. **Back to planned** cancels an unconfirmed placement. **Reset placement progress** unlocks all bases and clears their progress while retaining the roster, positions, and obstacles. **Clear formation** removes the current plan; saved API rosters and language preferences remain available. Both resets require confirmation.
+
+Positions, per-player progress, copied coordinates, selection, player IDs, HQ levels, and groups save locally without API calls. Confirmed bases prevent roster replacement and changes to the origin or spacing; undo confirmations or reset progress before changing those settings. Older saved sequential sessions upgrade automatically, preserving confirmed positions and obstacles.
 
 ## Import alliance players
 
@@ -41,7 +42,7 @@ When placement starts, preplanned obstacles are avoided and included in the map 
 2. Enter your [LastWarTools API key](https://lastwar.tools/) and server number, then click **Find alliances**.
 3. Select your alliance and click **Load players**. The API lists up to 200 ranked alliances per server. If yours is missing, use **Have an alliance ID instead?** and enter its 32-character ID from LastWarTools; that route does not need a server number.
 4. Review the roster, select power or alphabetical order, then click **Use … players**. Only this last step replaces the current roster. Closing the dialog, errors, and cancelled requests leave it unchanged.
-5. Edit names or reorder lines as needed, then start placement. Matching imported names retain their player IDs and metadata, including after refresh; newly entered names become manual records. Duplicate names are matched in their original occurrence order.
+5. Edit names or reorder lines as needed, then choose Place on any tile. Matching imported names retain their player IDs and metadata, including after refresh; newly entered names become manual records. Duplicate names are matched in their original occurrence order.
 
 Successful alliance searches and rosters are saved immediately in a separate local library, even before you click **Use … players**. Next time, the import dialog opens your most recently saved roster without asking for a key or calling the API. Choose another entry under **Saved roster** to reuse it. HQ levels, groups, power, and player IDs are retained. Resetting or clearing a formation does not erase this library. Existing imported players are copied into the library as **Previous import** when upgrading.
 
@@ -53,7 +54,7 @@ LastWarTools is an independent community provider. Its requests use your provide
 
 `lastwar-api.js` maps the provider's documented responses to player records and rejects incomplete/invalid rosters. Each imported player carries `hqLevel` (a positive integer or `null`) and `group` (the provider's rank code 1–5 or `null`), plus the original numeric `rank` for reference. HQ levels above 30 are supported. Missing/invalid levels and groups are shown as unknown; they are never replaced with zero or a guessed group. These details appear in the import review, formation, current player, and placement log, and survive sorting, reload, obstacles, and undo. Older saved imports are upgraded on load. Manual players can still be entered without these details.
 
-Formation tiles abbreviate **Group 1–5** as **R1–R5**, keeping the provider's original numbers unchanged. The provider describes rank 1 as “R1 Leader” but does not document the complete mapping to game roles. Keep that mapping in the adapter once verified; do not use the numeric direction as a leadership priority yet. Placement continues to use roster order, leaving level/group placement rules for the next iteration.
+Formation tiles abbreviate **Group 1–5** as **R1–R5**, keeping the provider's original numbers unchanged. The provider describes rank 1 as “R1 Leader” but does not document the complete mapping to game roles. Keep that mapping in the adapter once verified; do not use the numeric direction as a leadership priority yet. The initial layout uses roster order; players can then be moved and confirmed in any order. Automatic level/group placement rules are not implemented.
 
 `server.py` accepts only the two documented read operations, fixes the upstream host, refuses redirects and cross-origin browser calls, and does not cache responses. It is a local development relay, not a production hosting service.
 
@@ -67,7 +68,8 @@ Drafts, actions, and the roster library are saved automatically in this browser'
 index.html               Accessible page structure
 styles.css               Responsive interface and formation grid
 ui.js                    Events, rendering, and persistence feedback
-placement.js             Pure session transitions and coordinates
+placement.js             Coordinates and legacy session migration support
+tile-placement.js        Independent player progress, confirmations, locks, and migration
 players.js               Manual-input data adapter
 storage.js               Versioned localStorage boundary
 lastwar-api.js            Alliance/member API client and response validation
@@ -77,7 +79,8 @@ reorder-ui.js             Mouse/touch dragging and accessible keyboard reorderin
 free-formation.js         Signed grid positions, swaps, collisions, and expandable preview
 placement-messages.js     Translated placement messages, language preference, and copying
 server.py                 Static server and read-only API relay (Python stdlib)
-tests/placement.test.js  Engine and input-adapter tests
+tests/tile-placement.test.js Independent placement, locks, copy warnings, migration, and persistence
+tests/placement.test.js  Legacy engine and input-adapter tests
 tests/storage.test.js    Persistence and reset tests
 tests/lastwar-api.test.js API client, errors, sorting, and imported records
 tests/roster-cache.test.js Reuse without API calls, refresh, persistence, failures
@@ -89,15 +92,15 @@ package.json             Node test command; no dependencies
 
 ## Placement model
 
-`createSession` accepts player records (`{ id?, name, ...metadata }`), `x0`, `y0`, and `spacing`. Names are required; duplicates are allowed, with distinct IDs. Manual input is converted into records by `parseManualPlayers`. Other sources can later supply records through the same boundary. Metadata is preserved, but ranks do not influence this version.
+The default rectangle has `ceil(sqrt(playerCount))` columns, with a coordinate step of `3 + spacing`. Custom layouts store signed `{column, row}` positions keyed by player ID, plus obstacle positions, independently of the visible canvas bounds. Visual cells represent whole bases. The map provides empty drop targets around occupied tiles; very wide saved layouts use sparse cells.
 
-The default rectangle has `ceil(sqrt(playerCount))` columns. For slot `i`, column is `i % columns`, row is `floor(i / columns)`, and each axis advances by `3 + spacing`. Default sessions continue to use the original row-major placement rules. Dragging captures a custom `layout` with signed `{column, row}` positions keyed by player ID, plus obstacle positions. These are independent of the visible canvas bounds and may extend in any direction. `slotToCoordinate` and `tileToCoordinate` interpret the origin as the base reference point. The visual cells represent whole bases, not individual map tiles.
+`tile-placement.js` stores independent records for players in progress or placed; absence of a record means Planned. Starting placement captures the formation's current positions. Confirming stores the exact X/Y as a lock. All moves, swaps, obstacle edits, and setup edits preserve confirmed coordinates. Undo affects only the selected player.
 
-Custom sessions reserve every pending player's target and avoid both planned and newly recorded obstacles. An obstructed player scans forward to a free tile within the formation's column bounds, adding rows when needed; other players keep their positions. Snapshots store the initial custom layout and replay actions deterministically, including after reload or undo. Older rectangular drafts and sessions remain supported. The preview adds empty drop targets around the occupied area; sparse, very wide saved layouts avoid allocating every empty cell.
+Copy records store the actual coordinates, name, and language copied. Comparing them with the current tile detects stale messages, including when an asynchronous clipboard write finishes after a move. Copying never confirms arrival.
 
-Each consumed slot is an explicit `player` or `obstacle` occupant containing its slot index and coordinates. The occupant list also records undo history. `plannedObstacles` stores sorted, unique non-negative tile indices; automatic skips append obstacles marked `automatic: true`. Undo reverses the latest manual action and its subsequent automatic skips together. Upcoming player positions are projections. All planned obstacles remain visible even if a shorter roster no longer reaches them. Transitions return new state and do not mutate the previous session. Obstacles advance only the slot; players advance both indices. Multi-pass rank placement is not implemented yet.
+The workspace retains its versioned local storage format. Legacy sequential sessions are read by `placement.js` and migrated into explicit positions and independent confirmations. Its original action replay and tests remain for backward compatibility. New saves use draft layout and tile placement records with no sequential session.
 
-Saved sessions contain versioned setup inputs, planned obstacle indices, and manual action types. Loading replays validated actions and automatic skips to reconstruct explicit occupants, fixed columns, indices, and undo history. Older snapshots default to no planned obstacles. Invalid saved data is reported instead of used. Initial X/Y accept safe whole numbers (including zero and negative coordinates); spacing is a non-negative whole number. No game-specific map bounds are assumed. Unsafe coordinate arithmetic is rejected.
+Initial X/Y accept safe whole numbers, including zero and negatives; spacing must be a non-negative whole number. Unsafe arithmetic and overlapping positions are rejected. No game-specific map bounds are assumed. Player metadata is retained without interpreting rank codes as placement priority.
 
 ## Tests
 
@@ -117,4 +120,4 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 ## Deploy later
 
-Publish `index.html`, `styles.css`, `ui.js`, `placement.js`, `players.js`, `storage.js`, `import-ui.js`, `roster-cache.js`, `reorder-ui.js`, `placement-messages.js`, `free-formation.js`, and `lastwar-api.js` together. Manual planning and reuse of saved rosters work as a static site, including a GitHub Pages project path. Fetching new data additionally needs the same-origin `/api/lastwar/…` relay, which GitHub Pages cannot run. An HTTPS production deployment could implement the same two routes using a serverless function. This project has not been published.
+Publish `index.html`, `styles.css`, `ui.js`, `placement.js`, `tile-placement.js`, `players.js`, `storage.js`, `import-ui.js`, `roster-cache.js`, `reorder-ui.js`, `placement-messages.js`, `free-formation.js`, and `lastwar-api.js` together. Manual planning and reuse of saved rosters work as a static site, including a GitHub Pages project path. Fetching new data additionally needs the same-origin `/api/lastwar/…` relay, which GitHub Pages cannot run. An HTTPS production deployment could implement the same two routes using a serverless function. This project has not been published.

@@ -1,6 +1,7 @@
 import { restoreSession, serializeSession, normalizePlannedObstacles } from './placement.js';
 import { normalizeImportedPlayer, normalizeRosterContext } from './players.js';
 import { normalizeFreeLayout } from './free-formation.js';
+import { normalizeTilePlacements } from './tile-placement.js';
 
 export const STORAGE_KEY = 'basegrid.workspace.v1';
 export const DEFAULT_DRAFT = { names: '', x: '412', y: '687', spacing: '1' };
@@ -35,6 +36,8 @@ export function loadWorkspace(storage) {
   }
   // Upgrade earlier imports that retained rank/HQ metadata without a group field.
   const draft = { ...saved.draft };
+  if (draft.tilePlacements !== undefined) draft.tilePlacements = normalizeTilePlacements(draft.tilePlacements);
+  if (draft.selectedPlayerId !== undefined && typeof draft.selectedPlayerId !== 'string') draft.selectedPlayerId = null;
   if (draft.layout !== undefined) draft.layout = normalizeFreeLayout(draft.layout);
   if (draft.rosterContext !== undefined) draft.rosterContext = normalizeRosterContext(draft.rosterContext);
   if (draft.plannedObstacles !== undefined) draft.plannedObstacles = normalizePlannedObstacles(draft.plannedObstacles);

@@ -1,17 +1,17 @@
 import { tileKey } from './free-formation.js';
 
-/** Preview-only positioning with mouse/touch dragging and a keyboard equivalent. */
+/** Position unconfirmed bases and obstacles with a mouse, touch, or keyboard. */
 export function setupFormationReorder({ grid, map, obstacleTool, onDrop, announce }) {
   const root = grid.closest('.formation-panel');
   let move = null;
   let animation = null;
 
-  const cells = () => [...grid.querySelectorAll('.slot-reorderable')];
+  const cells = () => [...grid.querySelectorAll('.slot')];
   const tileOf = cell => ({ column: Number(cell.dataset.column), row: Number(cell.dataset.row) });
   const cellAt = tile => tile && cells().find(cell => cell.dataset.tile === tileKey(tile));
   const handleAt = tile => cellAt(tile)?.querySelector('.slot-move, .slot-drop');
   const sourceHandle = cell => cell === obstacleTool ? obstacleTool : cell.querySelector('.slot-move');
-  const canDrop = cell => cell && ['player', 'empty'].includes(cell.dataset.kind);
+  const canDrop = cell => cell && cell.dataset.locked !== 'true' && ['player', 'empty'].includes(cell.dataset.kind);
   const destinations = () => cells().filter(canDrop);
   const sameTile = (a, b) => a && b && tileKey(a) === tileKey(b);
   const description = tile => { const cell = cellAt(tile); return cell ? `X ${cell.dataset.x}, Y ${cell.dataset.y}` : 'outside the map'; };
@@ -87,7 +87,7 @@ export function setupFormationReorder({ grid, map, obstacleTool, onDrop, announc
 
   root.addEventListener('pointerdown', event => {
     if (event.button !== 0 || !event.isPrimary) return;
-    if (event.target.closest('.obstacle-remove')) return;
+    if (event.target.closest('.obstacle-remove, .tile-action')) return;
     const cell = event.target.closest('.slot-reorderable, #add-obstacle');
     if (!cell || cell.disabled) return;
     if (move && move.mode !== 'pointer') {
@@ -175,7 +175,7 @@ export function setupFormationReorder({ grid, map, obstacleTool, onDrop, announc
       else return;
       event.preventDefault();
       if (!canDrop(target) && !sameTile(target && tileOf(target), move.from)) {
-        announce(target ? 'That tile contains an obstacle. Choose another tile.' : 'Map edge. Drop here, or cancel and use More space to extend the map.');
+        announce(target ? target.dataset.locked === 'true' ? 'This base is confirmed and locked. Choose another tile.' : 'That tile contains an obstacle. Choose another tile.' : 'Map edge. Drop here, or cancel and use More space to extend the map.');
         return;
       }
       markTarget(tileOf(target));
