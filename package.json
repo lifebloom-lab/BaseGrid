@@ -3,6 +3,17 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "test": "node --test" },
-  "engines": { "node": ">=20" }
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.19.0",
+  "devDependencies": {
+    "wrangler": "4.144.0"
+  }
 }

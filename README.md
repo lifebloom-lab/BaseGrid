@@ -1,6 +1,6 @@
 # BaseGrid
 
-A small Last War alliance placement planner. The placement engine is client-side, with no dependencies or build step. Optional roster imports use LastWarTools through a small Python relay.
+A small Last War alliance placement planner. The placement engine runs in the browser without runtime dependencies. Optional roster imports use LastWarTools through a same-origin relay: Python for local use, or a Cloudflare Worker for hosting.
 
 ## Run locally
 
@@ -79,6 +79,10 @@ reorder-ui.js             Mouse/touch dragging and accessible keyboard reorderin
 free-formation.js         Signed grid positions, swaps, collisions, and expandable preview
 placement-messages.js     Translated placement messages, language preference, and copying
 server.py                 Static server and read-only API relay (Python stdlib)
+worker.js                 Cloudflare read-only API relay and asset binding
+wrangler.jsonc            Cloudflare deployment configuration
+scripts/build.mjs         Copies only public app assets into dist/
+tests/worker.test.js      Cloudflare routes, client integration, errors, and request limits
 tests/tile-placement.test.js Independent placement, locks, copy warnings, migration, and persistence
 tests/placement.test.js  Legacy engine and input-adapter tests
 tests/storage.test.js    Persistence and reset tests
@@ -87,7 +91,7 @@ tests/roster-cache.test.js Reuse without API calls, refresh, persistence, failur
 tests/reorder.test.js      Reordering, duplicate identities, persistence, coordinates
 tests/planned-obstacles.test.js Reserved tiles, automatic skips, undo, and persistence
 tests/test_server.py      Relay, response handling, and HTTP boundary tests
-package.json             Node test command; no dependencies
+package.json             Test/build commands and Wrangler deployment tool
 ```
 
 ## Placement model
@@ -104,13 +108,13 @@ Initial X/Y accept safe whole numbers, including zero and negatives; spacing mus
 
 ## Tests
 
-With Node.js 20 or later:
+With Node.js 22 or later:
 
 ```sh
 node --test
 ```
 
-`npm test` is equivalent; there is nothing to install. Tests cover ordinary and obstructed placement, fixed columns and added rows, several spacing values, undo, invalid input, one/square/non-square player counts, determinism, immutability, saved-session restoration, and API imports.
+`npm test` is equivalent; tests need no installed packages. Tests cover ordinary and obstructed placement, fixed columns and added rows, several spacing values, undo, invalid input, one/square/non-square player counts, determinism, immutability, saved-session restoration, and API imports. Worker tests use sample provider responses and verify that HQ levels and groups pass through the existing client. They also check allowed routes, origin checks, redirects, response-size limits, cancellation, timeouts, and sanitized errors without spending API credits.
 
 Run the Python relay tests separately (they open a temporary loopback server and never call the live API):
 
@@ -118,6 +122,40 @@ Run the Python relay tests separately (they open a temporary loopback server and
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-## Deploy later
+## Deploy on Cloudflare Workers Free
 
-Publish `index.html`, `styles.css`, `ui.js`, `placement.js`, `tile-placement.js`, `players.js`, `storage.js`, `import-ui.js`, `roster-cache.js`, `reorder-ui.js`, `placement-messages.js`, `free-formation.js`, and `lastwar-api.js` together. Manual planning and reuse of saved rosters work as a static site, including a GitHub Pages project path. Fetching new data additionally needs the same-origin `/api/lastwar/…` relay, which GitHub Pages cannot run. An HTTPS production deployment could implement the same two routes using a serverless function. This project has not been published.
+The repository is ready for a **Worker with Static Assets**. It hosts the planner and import relay at one HTTPS address. No Python service, database, custom domain, or LastWarTools key in Cloudflare settings is needed. Keep the account on **Workers Free**.
+
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), open **Workers & Pages → Create application → Import a repository**.
+2. Connect GitHub, grant access to **lifebloom-lab/BaseGrid**, and select that repository.
+3. Use these settings:
+
+   | Setting | Value |
+   | --- | --- |
+   | Project / Worker name | `basegrid` (lowercase, matching `wrangler.jsonc`) |
+   | Production branch | `main` |
+   | Root directory | Repository root; leave blank or use `/` |
+   | Build command | `node scripts/build.mjs` |
+   | Deploy command | `npx wrangler deploy` |
+   | Environment variables / secrets | None |
+
+4. Select **Save and Deploy**, then open the provided `https://basegrid.<your-subdomain>.workers.dev` address.
+
+Use Workers, including the Worker script, so `/api/lastwar/…` is available. A static-only upload or GitHub Pages cannot run the import relay. Cloudflare installs the pinned deployment tool from this repository. The explicit build command is needed for the dashboard build pipeline; `wrangler.jsonc` also runs the build for local Wrangler commands.
+
+The build copies only the 13 public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
+
+Saved plans and rosters remain in the visitor's browser. The Cloudflare address has its own storage: existing localhost data does not automatically move to the hosted app. Use the same hosted address consistently to reuse its saved rosters without calling the API again.
+
+The [Workers Free limits](https://developers.cloudflare.com/workers/platform/limits/) currently include 100,000 Worker requests per day across the account and 10 ms CPU time per request. Time waiting for LastWarTools does not count as CPU time. [Static assets](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) are served separately without invoking the Worker for matching files. Cloudflare hosting does not change LastWarTools' own API allowance.
+
+For a local Cloudflare preview, install Node.js 22+ and the pinned pnpm version, then run:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+To validate the deployment package without publishing, run `pnpm exec wrangler deploy --dry-run`. For a manual deployment after Cloudflare login, run `pnpm run deploy`. The Python local workflow above remains available without installing Node packages.
+
+Cloudflare documentation: [GitHub deployment setup](https://developers.cloudflare.com/workers/ci-cd/builds/) and [build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
