@@ -50,7 +50,7 @@
           <form id="setup-form">
             <div class="label-line"><label for="players">Player names</label><span id="player-count">0 players</span></div>
             <textarea id="players" name="players" rows="6" placeholder="Enter player names, one per line…" aria-describedby="players-help" required></textarea>
-            <p id="players-help" class="field-help">One name per line. Place players in any order from their tiles.</p>
+            <p id="players-help" class="field-help">One name per line. New players join the base pool.</p>
             <div class="section-label coordinates-label"><span>02</span> THE STARTING POINT</div>
             <div class="coordinate-inputs">
               <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" aria-describedby="coordinate-help" required></div>
@@ -71,10 +71,15 @@
           <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><div class="formation-heading-actions"><span id="grid-size" class="grid-size">Awaiting roster</span><button id="formation-fullscreen-toggle" class="button secondary formation-expand" type="button" aria-expanded="false" aria-controls="formation-fullscreen" title="Expand formation to fill the window"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path id="formation-expand-icon" d="M7 3H3v4m10-4h4v4M3 13v4h4m6 0h4v-4"/></svg><span id="formation-expand-label">Full screen</span></button></div></div>
           <div class="placement-overview"><p id="placement-count" role="status">0 placed · 0 in progress · 0 remaining</p><progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress></div>
           <div class="legend" aria-label="Slot legend"><span><i class="legend-pending"></i>Planned</span><span><i class="legend-progress"></i>In progress</span><span><i class="legend-placed"></i>Placed</span><span><i class="legend-blocked"></i>Obstacle</span></div>
+          <div id="base-pool" class="base-pool" hidden>
+            <div class="pool-heading"><label for="pool-player">Base pool <span id="pool-count"></span></label><button id="auto-place" class="button secondary" type="button">Auto place</button></div>
+            <div class="pool-picker"><div class="pool-select"><select id="pool-player" aria-describedby="pool-help"></select><svg class="pool-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></div><button id="add-base" class="button primary base-tool" data-size="3" type="button" aria-pressed="false" aria-describedby="pool-help reorder-help">＋ Add base</button></div>
+            <p id="pool-help" class="field-help">Choose a player. Drag Add base onto the map, or click it then choose an empty area.</p>
+          </div>
           <div id="obstacle-tools" class="obstacle-tools" hidden><button id="add-obstacle" class="button obstacle-button obstacle-tool" data-size="1" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle 1 × 1</button><button id="add-large-obstacle" class="button obstacle-button obstacle-tool" data-size="3" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle 3 × 3</button><button id="expand-map" class="button secondary" type="button">＋ More space</button><span>Drag an obstacle, or click then choose an empty area.</span></div>
           <p id="reorder-help" class="reorder-help" hidden>Drop onto another base to swap positions. Base coordinates mark the center of each 3 × 3 base.<span>Confirmed bases stay locked. Green previews fit; red previews are blocked. Touch: drag ⠿. Keyboard: focus a handle or obstacle button, press Space, use arrow keys, then Space to drop. Escape cancels. More space extends the map.</span></p>
           <p id="reorder-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
-          <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster to preview the formation.<br>Players fill each row from left to right.</p></div>
+          <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster, then auto place your bases<br>or add them one at a time from the pool.</p></div>
           <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
           <div class="map-footer"><span id="formation-summary">Add players to start shaping your formation.</span><span class="map-orientation">X → <span aria-hidden="true">/</span> Y ↓</span></div>
         </section>
@@ -89,6 +94,17 @@
   </main>
   <dialog id="formation-fullscreen" class="formation-fullscreen" aria-labelledby="formation-title"></dialog>
   <dialog id="placement-popup" class="placement-popup" aria-labelledby="player-message-title"></dialog>
+  <dialog id="auto-place-dialog" class="auto-place-dialog" aria-labelledby="auto-place-title" aria-describedby="auto-place-description">
+    <h2 id="auto-place-title">Auto place bases</h2>
+    <p id="auto-place-description"></p>
+    <form id="auto-place-form">
+      <label class="auto-choice"><input type="radio" name="auto-mode" value="pool" checked><span><strong>Place bases from the pool</strong><small id="auto-pool-help">Keep the current arrangement.</small></span></label>
+      <label class="auto-choice"><input type="radio" name="auto-mode" value="rearrange"><span><strong>Rearrange all unconfirmed bases</strong><small>Include the pool. Coordinates in messages may change.</small></span></label>
+      <p class="field-help">Confirmed bases and obstacles stay fixed.</p>
+      <p id="auto-place-error" class="error" role="alert" hidden></p>
+      <div class="auto-actions"><button id="cancel-auto-place" class="button secondary" type="button">Cancel</button><button class="button primary" type="submit">Auto place</button></div>
+    </form>
+  </dialog>
   <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title" aria-describedby="import-description">
     <p class="eyebrow">ALLIANCE ROSTER</p>
     <h2 id="import-title">Import players</h2>

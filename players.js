@@ -39,6 +39,15 @@ export function playerDetails(player, groupPrefix = 'Group ') {
   return `${details.hqLevel === null ? 'HQ unknown' : `HQ ${details.hqLevel}`} · ${details.group === null ? 'Group unknown' : `${groupPrefix}${details.group}`}`;
 }
 
+/** Pool display order only: known ranks and HQ levels first, then names for ties. */
+export function sortPoolPlayers(players) {
+  return players.map(player => ({ player, details: normalizeImportedPlayer(player) }))
+    .sort((a, b) => (b.details.group ?? 0) - (a.details.group ?? 0) ||
+      (b.details.hqLevel ?? 0) - (a.details.hqLevel ?? 0) ||
+      a.player.name.localeCompare(b.player.name, 'en', { sensitivity: 'base', numeric: true }))
+    .map(({ player }) => player);
+}
+
 /** Manual input is an adapter. The engine only receives player records. */
 export function parseManualPlayers(text) {
   return text.split(/\r?\n/).map(name => name.trim()).filter(Boolean)

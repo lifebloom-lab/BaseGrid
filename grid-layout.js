@@ -39,6 +39,7 @@ export function normalizeGridLayout(layout) {
     throw new Error('The saved grid layout is invalid or from an unsupported version.');
   }
   const ids = new Set();
+  if (layout.explicit !== undefined && typeof layout.explicit !== 'boolean') throw new Error('The saved placement mode is invalid.');
   const occupied = [];
   const claim = (value, size) => {
     const tile = { ...gridPosition(value, size), size };
@@ -48,6 +49,7 @@ export function normalizeGridLayout(layout) {
   };
   return {
     version: GRID_LAYOUT_VERSION,
+    ...(layout.explicit !== undefined ? { explicit: layout.explicit } : {}),
     players: layout.players.map(player => {
       if (typeof player?.playerId !== 'string' || !player.playerId.trim() || ids.has(player.playerId)) {
         throw new Error('Each formation position needs a unique player ID.');
@@ -65,6 +67,8 @@ export function resolveGridLayout(players, layout, columns, spacing) {
   const clean = normalizeGridLayout(layout);
   const ids = new Set(players.map(player => player.id));
   const known = new Map(clean.players.filter(tile => ids.has(tile.playerId)).map(tile => [tile.playerId, tile]));
+  // Explicit plans keep absent roster members in the pool until the user adds them.
+  if (clean.explicit) return { ...clean, players: players.filter(player => known.has(player.id)).map(player => known.get(player.id)) };
   const occupied = [...known.values(), ...clean.obstacles];
   let index = 0;
   const step = BASE_SIZE + spacing;
@@ -86,6 +90,7 @@ export function layoutFromSlots(plan, slots) {
     return { column: slot.x - plan.origin.x - offset, row: slot.y - plan.origin.y - offset };
   };
   return normalizeGridLayout({ version: GRID_LAYOUT_VERSION,
+    ...(plan.layout?.explicit !== undefined ? { explicit: plan.layout.explicit } : {}),
     players: slots.filter(slot => slot.type === 'player').map(slot => ({ playerId: slot.playerId, ...position(slot) })),
     obstacles: slots.filter(slot => slot.type === 'obstacle').map(slot => ({ ...position(slot), size: slot.size ?? BASE_SIZE })),
   });
@@ -94,12 +99,14 @@ export function layoutFromSlots(plan, slots) {
 /** Preview and commit share validation. Base swaps exchange two existing footprints exactly. */
 export function previewGridMove(plan, kind, from, to, size = BASE_SIZE) {
   try {
-    if (!['player', 'obstacle', 'new-obstacle'].includes(kind)) throw new Error('Unknown formation move.');
-    const source = kind === 'new-obstacle' ? null : plan.slots.find(slot => slot.type === kind &&
+    if (!['player', 'obstacle', 'new-obstacle', 'new-player'].includes(kind)) throw new Error('Unknown formation move.');
+    const adding = kind.startsWith('new-');
+    if (kind === 'new-player' && !plan.pool?.some(player => player.id === from?.playerId)) throw new Error('Choose a base from the pool.');
+    const source = adding ? null : plan.slots.find(slot => slot.type === kind &&
       slot.column === from?.column && slot.row === from?.row);
-    if (kind !== 'new-obstacle' && !source) throw new Error('Choose a base or obstacle to move.');
+    if (!adding && !source) throw new Error('Choose a base or obstacle to move.');
     if (source?.status === 'placed') throw new Error('This base is confirmed. Undo its confirmation before moving it.');
-    size = source?.size ?? obstacleSize(size);
+    size = kind === 'new-player' ? BASE_SIZE : source?.size ?? obstacleSize(size);
     if (!to) {
       if (kind !== 'obstacle') throw new Error('Choose a destination on the map.');
       return { valid: true, size };

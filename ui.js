@@ -1,9 +1,9 @@
-import { parseManualPlayers, playerDetails, normalizeImportedPlayer, rosterContextLabels } from './players.js';
+import { parseManualPlayers, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js';
 import { tileKey } from './free-formation.js';
 import { gridCanvas, previewGridMove } from './grid-layout.js';
 import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './storage.js';
 import { getTilePlan, openTilePlacement, confirmTilePlacement, undoTileConfirmation, cancelTilePlacement,
-  recordCopiedMessage, moveTile, updateTileDraft, resetTileProgress, migrateTileWorkspace } from './tile-placement.js';
+  recordCopiedMessage, moveTile, updateTileDraft, resetTileProgress, migrateTileWorkspace, returnBaseToPool, autoPlaceBases } from './tile-placement.js';
 import { setupRosterImport } from './import-ui.js';
 import { setupFormationReorder } from './reorder-ui.js';
 import { setupPlacementMessages } from './placement-messages.js';
@@ -15,6 +15,8 @@ let reorder = null;
 let currentPlan = null;
 let mapPadding = 1;
 let resetKind = 'clear';
+let poolPlayerId = null;
+const autoPlaceDialog = byId('auto-place-dialog');
 const fullscreenDialog = byId('formation-fullscreen');
 const fullscreenToggle = byId('formation-fullscreen-toggle');
 const fullscreenHomes = new Map();
@@ -187,7 +189,7 @@ function change(update, focusId) {
 
 function renderFormation(plan) {
   reorder?.cancel();
-  for (const id of ['reorder-help', 'obstacle-tools', 'map-scroll']) byId(id).hidden = !plan;
+  for (const id of ['reorder-help', 'obstacle-tools', 'map-scroll', 'base-pool']) byId(id).hidden = !plan;
   for (const tool of document.querySelectorAll('.obstacle-tool')) tool.disabled = !plan;
   byId('map-empty').hidden = Boolean(plan);
   const grid = byId('formation-grid');
@@ -197,7 +199,8 @@ function renderFormation(plan) {
     byId('formation-summary').textContent = 'Add players to start shaping your formation.';
     return;
   }
-  const canvas = gridCanvas(plan.slots, mapPadding);
+  renderPool(plan);
+  const canvas = gridCanvas(plan.pool.length ? [...plan.slots, { column: 0, row: 0, size: 9 }] : plan.slots, mapPadding);
   const playersById = new Map(plan.players.map(player => [player.id, player]));
   const playerNumbers = new Map(plan.players.map((player, index) => [player.id, index + 1]));
   grid.style.setProperty('--columns', canvas.columns);
@@ -229,7 +232,21 @@ function renderFormation(plan) {
       handle.setAttribute('aria-describedby', 'reorder-help');
       handle.setAttribute('aria-pressed', 'false');
       handle.title = 'Drag to move, or press Space and use the arrow keys';
-      top.append(handle);
+      if (slot.type === 'player') {
+        const actions = element('span', 'slot-tools');
+        const remove = element('button', 'base-return', '↶');
+        remove.type = 'button';
+        remove.title = `Return ${slot.name} to pool`;
+        remove.setAttribute('aria-label', remove.title);
+        remove.addEventListener('click', () => {
+          poolPlayerId = slot.playerId;
+          if (change(value => returnBaseToPool(value, slot.playerId), 'add-base')) {
+            byId('reorder-status').textContent = `${slot.name} returned to the pool. Their roster details are saved.`;
+          }
+        });
+        actions.append(remove, handle);
+        top.append(actions);
+      } else top.append(handle);
     } else top.append(element('span', 'slot-state', '✓ Placed'));
     cell.append(top);
     if (!small) cell.append(element('span', 'slot-name', slot.type === 'obstacle' ? '× Blocked' : slot.name));
@@ -270,6 +287,78 @@ function renderFormation(plan) {
   const blocked = plan.slots.filter(slot => slot.type === 'obstacle').length;
   byId('formation-summary').textContent = `${blocked} ${blocked === 1 ? 'obstacle' : 'obstacles'} · Confirmed bases stay locked. Empty tiles stay empty.`;
 }
+
+function renderPool(plan) {
+  const picker = byId('pool-player');
+  const players = sortPoolPlayers(plan.pool);
+  const grouped = players.some(player => normalizeImportedPlayer(player).group !== null);
+  const groups = new Map();
+  picker.replaceChildren();
+  for (const player of players) {
+    const details = playerDetails(player, 'R');
+    const option = element('option', '', `${player.name}${details ? ` · ${details}` : ''}`);
+    option.value = player.id;
+    if (grouped) {
+      const rank = normalizeImportedPlayer(player).group;
+      if (!groups.has(rank)) {
+        const group = element('optgroup');
+        group.label = rank === null ? 'Rank unavailable' : `R${rank}`;
+        groups.set(rank, group);
+        picker.append(group);
+      }
+      groups.get(rank).append(option);
+    } else picker.append(option);
+  }
+  if (!plan.pool.length) picker.append(element('option', '', 'All bases are on the map'));
+  if (!players.some(player => player.id === poolPlayerId)) poolPlayerId = players[0]?.id ?? null;
+  if (poolPlayerId) picker.value = poolPlayerId;
+  picker.disabled = !plan.pool.length;
+  byId('pool-count').textContent = `· ${plan.pool.length}`;
+  byId('auto-place').disabled = plan.slots.filter(slot => slot.status === 'placed').length === plan.players.length;
+  byId('pool-help').textContent = plan.pool.length
+    ? 'Choose a player. Drag Add base onto the map, or click it then choose an empty area.'
+    : 'Use ↶ on an unconfirmed base to return it to the pool.';
+  syncPoolTool();
+}
+
+function syncPoolTool() {
+  const player = currentPlan?.pool.find(player => player.id === poolPlayerId);
+  const tool = byId('add-base');
+  tool.disabled = !player;
+  tool.dataset.playerId = player?.id ?? '';
+  tool.dataset.name = player?.name ?? '';
+  tool.setAttribute('aria-label', player ? `Add base for ${player.name}` : 'Add base');
+}
+byId('pool-player').addEventListener('change', () => {
+  reorder?.cancel();
+  poolPlayerId = byId('pool-player').value;
+  syncPoolTool();
+});
+
+byId('auto-place').addEventListener('click', () => {
+  if (!currentPlan) return;
+  reorder?.cancel();
+  const poolChoice = byId('auto-place-form').elements['auto-mode'][0];
+  const rearrangeChoice = byId('auto-place-form').elements['auto-mode'][1];
+  poolChoice.disabled = !currentPlan.pool.length;
+  poolChoice.checked = Boolean(currentPlan.pool.length);
+  rearrangeChoice.checked = !currentPlan.pool.length;
+  byId('auto-pool-help').textContent = currentPlan.pool.length ? `${currentPlan.pool.length} ${currentPlan.pool.length === 1 ? 'base' : 'bases'}. Keep the current arrangement.` : 'The pool is empty.';
+  byId('auto-place-description').textContent = `Start at X ${currentPlan.origin.x}, Y ${currentPlan.origin.y}, with ${currentPlan.spacing} empty ${currentPlan.spacing === 1 ? 'tile' : 'tiles'} between bases. Occupied areas are skipped.`;
+  showMessage('auto-place-error');
+  autoPlaceDialog.showModal();
+});
+byId('cancel-auto-place').addEventListener('click', () => autoPlaceDialog.close());
+byId('auto-place-form').addEventListener('submit', event => {
+  event.preventDefault();
+  try {
+    const next = autoPlaceBases(draft, byId('auto-place-form').elements['auto-mode'].value);
+    change(() => next);
+    autoPlaceDialog.close();
+    byId('auto-place').focus({ preventScroll: true });
+    byId('reorder-status').textContent = 'Bases arranged from the starting point. Confirmed bases and obstacles stayed fixed. Plan saved.';
+  } catch (error) { showMessage('auto-place-error', error.message); }
+});
 
 function renderResults(plan) {
   const recorded = plan?.slots.filter(slot => slot.status === 'placed' || slot.type === 'obstacle') ?? [];
@@ -331,7 +420,7 @@ function render() {
   byId('player-count').textContent = `${count} ${count === 1 ? 'player' : 'players'}`;
   const spacing = Number(draft.spacing);
   byId('spacing-help').textContent = draft.spacing.trim() && Number.isSafeInteger(spacing) && spacing >= 0
-    ? `${spacing} ${spacing === 1 ? 'tile' : 'tiles'} ${draft.layout ? 'between new bases; arranged bases keep their positions.' : 'between initial bases.'} Dragging moves 1 tile at a time.`
+    ? `${spacing} empty ${spacing === 1 ? 'tile' : 'tiles'} between bases when using Auto place. Dragging moves 1 tile at a time.`
     : 'Spacing is the number of empty tiles between bases.';
   renderFormation(plan);
   renderResults(plan);
@@ -407,7 +496,7 @@ const imported = setupRosterImport({ hasRoster: () => parseManualPlayers(draft.n
     if (change(value => updateTileDraft(value, { names: players.map(player => player.name).join('\n'),
       importedPlayers: players, orderedPlayers: players, rosterContext }))) {
       syncFields();
-      showMessage('notice', `${players.length} players imported. Arrange the formation, then choose Place on any player.`);
+      showMessage('notice', `${players.length} players imported. Add bases from the pool or use Auto place, then choose Place on any player.`);
     }
   },
 });

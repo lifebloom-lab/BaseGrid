@@ -54,11 +54,12 @@ export function getTilePlan(draft) {
       throw new Error('Undo the affected player’s confirmation before changing their position or removing them.');
     }
   }
-  return { ...plan, layout, slots };
+  const assigned = new Set(layout.players.map(tile => tile.playerId));
+  return { ...plan, layout, slots, pool: plan.players.filter(player => !assigned.has(player.id)) };
 }
 
 function freezePositions(draft, plan) {
-  return { ...draft, orderedPlayers: plan.players, plannedObstacles: [], layout: layoutFromSlots(plan, plan.slots) };
+  return { ...draft, orderedPlayers: plan.players, plannedObstacles: [], layout: { ...layoutFromSlots(plan, plan.slots), explicit: true } };
 }
 
 function selectedTile(draft, playerId) {
@@ -121,6 +122,8 @@ export function moveTile(draft, kind, from, to, size = 3) {
     const target = preview.swap && next.layout.players.find(tile => tile.playerId === preview.swap.playerId);
     if (target) Object.assign(target, { column: source.column, row: source.row });
     Object.assign(source, { column: destination.column, row: destination.row });
+  } else if (kind === 'new-player') {
+    next.layout.players.push({ playerId: from.playerId, column: destination.column, row: destination.row });
   } else {
     if (kind === 'obstacle') next.layout.obstacles = next.layout.obstacles.filter(tile => !same(tile));
     if (destination) next.layout.obstacles.push({ column: destination.column, row: destination.row, size: preview.size });
@@ -130,11 +133,44 @@ export function moveTile(draft, kind, from, to, size = 3) {
   return next;
 }
 
+/** Returning to the pool cancels this placement, while keeping the roster record. */
+export function returnBaseToPool(draft, playerId) {
+  const { plan, tile } = selectedTile(draft, playerId);
+  if (tile.status === 'placed') throw new Error('Undo this player’s confirmation before returning their base to the pool.');
+  const next = setRecord(freezePositions(draft, plan), playerId, null);
+  next.layout.players = next.layout.players.filter(position => position.playerId !== playerId);
+  if (next.selectedPlayerId === playerId) next.selectedPlayerId = null;
+  getTilePlan(next);
+  return next;
+}
+
+/** Both choices start at the origin and skip obstacles and bases that stay fixed. */
+export function autoPlaceBases(draft, mode = 'pool') {
+  if (!['pool', 'rearrange'].includes(mode)) throw new Error('Choose which bases to auto place.');
+  const plan = getTilePlan(draft);
+  const next = freezePositions(draft, plan);
+  if (mode === 'rearrange') {
+    const locked = new Set(plan.slots.filter(slot => slot.status === 'placed').map(slot => slot.playerId));
+    next.layout.players = next.layout.players.filter(tile => locked.has(tile.playerId));
+  }
+  next.layout = { ...resolveGridLayout(plan.players, { ...next.layout, explicit: false }, plan.columns, plan.spacing), explicit: true };
+  getTilePlan(next);
+  return next;
+}
+
 export function updateTileDraft(draft, patch) {
   const next = { ...draft, ...patch };
   const players = playersFromDraft(next);
   const ids = new Set(players.map(player => player.id));
   const records = normalizeTilePlacements(draft.tilePlacements);
+  if ((patch.names !== undefined && patch.names !== draft.names) || patch.importedPlayers !== undefined) {
+    // Freeze the old formation before roster additions; new members start in the pool.
+    let layout = draft.layout;
+    try { layout = freezePositions(draft, getTilePlan(draft)).layout; } catch { /* Keep incomplete setups editable. */ }
+    if (!layout) layout = { version: 2, explicit: true, players: [], obstacles: [] };
+    if (layout.version === 2) next.layout = { ...layout, explicit: true, players: layout.players.filter(tile => ids.has(tile.playerId)) };
+    next.orderedPlayers = players;
+  }
   if (records.some(record => record.status === 'placed')) {
     if (patch.spacing !== undefined && patch.spacing !== draft.spacing) throw new Error('Undo confirmations before changing spacing.');
     getTilePlan(next);

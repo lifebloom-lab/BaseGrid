@@ -9,7 +9,7 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
   const position = cell => ({ column: Number(cell.dataset.column), row: Number(cell.dataset.row) });
   const same = (a, b) => a && b && a.column === b.column && a.row === b.row;
   const cellAt = tile => cells().find(cell => same(position(cell), tile));
-  const handle = cell => cell.matches('.obstacle-tool') ? cell : cell.querySelector('.slot-move');
+  const handle = cell => cell.matches('.obstacle-tool, .base-tool') ? cell : cell.querySelector('.slot-move');
   const unit = () => parseFloat(getComputedStyle(grid).getPropertyValue('--cell-size'));
   const bounds = () => ({ column: Number(grid.dataset.minColumn), row: Number(grid.dataset.minRow),
     columns: Number(grid.dataset.columns), rows: Number(grid.dataset.rows) });
@@ -44,20 +44,21 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
   }
 
   function start(cell, mode) {
-    const palette = cell.matches('.obstacle-tool');
-    const from = palette ? null : position(cell);
+    const palette = cell.matches('.obstacle-tool, .base-tool');
+    const base = cell.matches('.base-tool');
+    const from = base ? { playerId: cell.dataset.playerId } : palette ? null : position(cell);
     const size = Number(cell.dataset.size);
     const preview = document.createElement('li');
     preview.className = 'drop-preview';
     preview.setAttribute('aria-hidden', 'true');
     grid.append(preview);
-    move = { mode, from, kind: palette ? 'new-obstacle' : cell.dataset.kind, size, cell, preview,
-      name: palette || cell.dataset.kind === 'obstacle' ? `Obstacle ${size} × ${size}` : cell.querySelector('.slot-name').textContent };
+    move = { mode, from, palette, kind: base ? 'new-player' : palette ? 'new-obstacle' : cell.dataset.kind, size, cell, preview,
+      name: base ? cell.dataset.name : palette || cell.dataset.kind === 'obstacle' ? `Obstacle ${size} × ${size}` : cell.querySelector('.slot-name').textContent };
     cell.classList.add('is-drag-source');
     handle(cell).setAttribute('aria-pressed', 'true');
     handle(cell).focus({ preventScroll: true });
     const area = bounds();
-    markTarget(from ?? { column: area.column, row: area.row });
+    markTarget(palette ? { column: 0, row: 0 } : from ?? { column: area.column, row: area.row });
     if (mode === 'pointer') preview.hidden = true;
     else announce(`${move.name}. Move one tile with the arrow keys, then Space to drop. Escape cancels.`);
   }
@@ -108,8 +109,8 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
       if (target) return position(target);
     }
     // Preserve the grabbed point on existing bases, snapping their anchor to the nearest cell.
-    const offsetX = move.mode === 'pointer' && move.from ? move.offsetX - unit() / 2 : 0;
-    const offsetY = move.mode === 'pointer' && move.from ? move.offsetY - unit() / 2 : 0;
+    const offsetX = move.mode === 'pointer' && !move.palette ? move.offsetX - unit() / 2 : 0;
+    const offsetY = move.mode === 'pointer' && !move.palette ? move.offsetY - unit() / 2 : 0;
     const column = area.column + Math.floor((x - rect.left - offsetX) / unit());
     const row = area.row + Math.floor((y - rect.top - offsetY) / unit());
     return { column, row };
@@ -134,10 +135,10 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
       finish();
       return;
     }
-    if (event.target.closest('.obstacle-remove, .tile-action')) return;
-    const cell = event.target.closest('.slot-reorderable, .obstacle-tool');
+    if (event.target.closest('.obstacle-remove, .tile-action, .base-return')) return;
+    const cell = event.target.closest('.slot-reorderable, .obstacle-tool, .base-tool');
     if (!cell || cell.disabled) return;
-    if (event.pointerType === 'touch' && !cell.matches('.obstacle-tool') && !event.target.closest('.slot-move')) return;
+    if (event.pointerType === 'touch' && !cell.matches('.obstacle-tool, .base-tool') && !event.target.closest('.slot-move')) return;
     cancel();
     if (event.pointerType === 'mouse') event.preventDefault();
     start(cell, 'pointer');
@@ -181,9 +182,9 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     root.addEventListener(type, () => { if (move?.mode === 'pointer') cancel('Move cancelled. Plan unchanged.'); });
   }
   root.addEventListener('keydown', event => {
-    const target = event.target.closest('.slot-move, .obstacle-tool');
+    const target = event.target.closest('.slot-move, .obstacle-tool, .base-tool');
     if (!target || target.disabled) return;
-    const cell = target.matches('.obstacle-tool') ? target : target.closest('.slot-reorderable');
+    const cell = target.matches('.obstacle-tool, .base-tool') ? target : target.closest('.slot-reorderable');
     if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
       if (move && move.mode !== 'pointer') finish();
