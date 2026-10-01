@@ -14,7 +14,7 @@ UPSTREAM = "https://api.lastwar.tools"
 MAX_RESPONSE = 2 * 1024 * 1024
 ASSETS = {"/", "/index.html", "/styles.css", "/ui.js", "/placement.js", "/players.js",
           "/storage.js", "/import-ui.js", "/lastwar-api.js", "/roster-cache.js", "/reorder-ui.js",
-          "/placement-messages.js", "/free-formation.js", "/tile-placement.js"}
+          "/placement-messages.js", "/free-formation.js", "/tile-placement.js", "/grid-layout.js", "/lifebloom-zombie.png"}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

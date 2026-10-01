@@ -64,7 +64,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     const controller = new AbortController();
     request = controller;
     setBusy(true);
-    message('import-status', status);
+    message('import-status', `${status} Please wait.`);
     try {
       await task({ apiKey: key.value, signal: controller.signal }, controller);
     } catch (error) {

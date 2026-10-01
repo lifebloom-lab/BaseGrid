@@ -17,7 +17,7 @@
     <span id="save-status" class="save-status" role="status">Saved on this device</span>
   </header>
   <main>
-    <div class="page-heading"><div><p class="eyebrow">A LITTLE ORDER ON THE MAP</p><h1>Formation planner<span>.</span></h1></div><p class="base-note">3 × 3 tiles per base</p></div>
+    <div class="page-heading"><div><p class="eyebrow">A LITTLE ORDER ON THE MAP</p><h1>Formation planner<span>.</span></h1></div></div>
     <section id="roster-context" class="roster-context" aria-label="Imported roster context" hidden>
       <p class="eyebrow">IMPORTED FROM</p>
       <dl><div><dt>Server</dt><dd id="roster-server"></dd></div><div><dt>Alliance</dt><dd id="roster-alliance"></dd></div></dl>
@@ -31,7 +31,7 @@
           <h2 id="player-message-title" tabindex="-1"></h2>
           <p id="selected-details" class="player-details"></p>
           <p id="message-recipient" class="sr-only"></p>
-          <div class="proposed-coordinates selected-coordinates"><div><span>X</span><strong id="selected-x"></strong></div><div><span>Y</span><strong id="selected-y"></strong></div></div>
+          <div class="proposed-coordinates selected-coordinates"><div><span>Center X</span><strong id="selected-x"></strong></div><div><span>Center Y</span><strong id="selected-y"></strong></div></div>
           <div id="message-compose">
             <p id="message-changed" class="notice" role="status" hidden>Coordinates changed—copy the updated message.</p>
             <fieldset class="message-language-picker"><legend>Message language <span id="message-language-name"></span></legend><div id="message-languages" class="message-languages"></div></fieldset>
@@ -53,11 +53,12 @@
             <p id="players-help" class="field-help">One name per line. Place players in any order from their tiles.</p>
             <div class="section-label coordinates-label"><span>02</span> THE STARTING POINT</div>
             <div class="coordinate-inputs">
-              <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" required></div>
-              <div><label for="initial-y">Initial Y</label><input id="initial-y" name="y" type="number" step="1" value="687" required></div>
+              <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" aria-describedby="coordinate-help" required></div>
+              <div><label for="initial-y">Initial Y</label><input id="initial-y" name="y" type="number" step="1" value="687" aria-describedby="coordinate-help" required></div>
               <div><label for="spacing">Spacing</label><input id="spacing" name="spacing" type="number" min="0" step="1" value="1" required></div>
             </div>
-            <p id="spacing-help" class="field-help">1 tile between bases · 4-coordinate step</p>
+            <p id="coordinate-help" class="field-help">Initial X/Y marks the center tile of the first base.</p>
+            <p id="spacing-help" class="field-help">1 tile between initial bases. Dragging moves 1 tile at a time.</p>
             <p id="settings-lock-help" class="field-help" hidden>Roster, starting point, and spacing are locked while bases are confirmed. Undo confirmations to change them.</p>
           </form>
           <div class="setup-tools"><button id="reset-progress" class="text-button" type="button" hidden>Reset placement progress</button><button id="clear-draft" class="text-button" type="button">Clear formation</button></div>
@@ -66,12 +67,12 @@
       </aside>
 
       <div class="formation-column">
-        <section class="panel formation-panel" aria-labelledby="formation-title">
-          <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><span id="grid-size" class="grid-size">Awaiting roster</span></div>
+        <section id="formation-panel" class="panel formation-panel" aria-labelledby="formation-title">
+          <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><div class="formation-heading-actions"><span id="grid-size" class="grid-size">Awaiting roster</span><button id="formation-fullscreen-toggle" class="button secondary formation-expand" type="button" aria-expanded="false" aria-controls="formation-fullscreen" title="Expand formation to fill the window"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path id="formation-expand-icon" d="M7 3H3v4m10-4h4v4M3 13v4h4m6 0h4v-4"/></svg><span id="formation-expand-label">Full screen</span></button></div></div>
           <div class="placement-overview"><p id="placement-count" role="status">0 placed · 0 in progress · 0 remaining</p><progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress></div>
           <div class="legend" aria-label="Slot legend"><span><i class="legend-pending"></i>Planned</span><span><i class="legend-progress"></i>In progress</span><span><i class="legend-placed"></i>Placed</span><span><i class="legend-blocked"></i>Obstacle</span></div>
-          <div id="obstacle-tools" class="obstacle-tools" hidden><button id="add-obstacle" class="button obstacle-button obstacle-tool" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle</button><button id="expand-map" class="button secondary" type="button">＋ More space</button><span>Drag an obstacle, or click then choose a tile.</span></div>
-          <p id="reorder-help" class="reorder-help" hidden>Choose Place on any player. Keep dragging unconfirmed bases to shape the formation.<span>Drop onto another unconfirmed player to swap. Gaps stay empty. Touch: drag ⠿. Keyboard: focus a handle or Obstacle, press Space, use arrow keys, then Space to drop. Escape cancels. More space extends the map.</span></p>
+          <div id="obstacle-tools" class="obstacle-tools" hidden><button id="add-obstacle" class="button obstacle-button obstacle-tool" data-size="1" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle 1 × 1</button><button id="add-large-obstacle" class="button obstacle-button obstacle-tool" data-size="3" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle 3 × 3</button><button id="expand-map" class="button secondary" type="button">＋ More space</button><span>Drag an obstacle, or click then choose an empty area.</span></div>
+          <p id="reorder-help" class="reorder-help" hidden>Drop onto another base to swap positions. Base coordinates mark the center of each 3 × 3 base.<span>Confirmed bases stay locked. Green previews fit; red previews are blocked. Touch: drag ⠿. Keyboard: focus a handle or obstacle button, press Space, use arrow keys, then Space to drop. Escape cancels. More space extends the map.</span></p>
           <p id="reorder-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
           <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster to preview the formation.<br>Players fill each row from left to right.</p></div>
           <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
@@ -84,8 +85,10 @@
         </section>
       </div>
     </div>
-    <footer class="page-footer"><span>BASEGRID <span class="footer-divider">/</span> BUILT FOR YOUR ALLIANCE</span><span>Manual placement · Optional roster import</span></footer>
+    <footer class="page-footer"><span>BASEGRID <span class="footer-divider">/</span> BUILT FOR YOUR ALLIANCE</span><a class="lab-credit" href="https://github.com/lifebloom-lab/BaseGrid" target="_blank" rel="noopener noreferrer" aria-label="Lifebloom Lab — BaseGrid on GitHub (opens in a new tab)"><img src="./lifebloom-zombie.png" alt="" width="40" height="40" loading="lazy" decoding="async"><span>Lifebloom Lab</span></a></footer>
   </main>
+  <dialog id="formation-fullscreen" class="formation-fullscreen" aria-labelledby="formation-title"></dialog>
+  <dialog id="placement-popup" class="placement-popup" aria-labelledby="player-message-title"></dialog>
   <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title" aria-describedby="import-description">
     <p class="eyebrow">ALLIANCE ROSTER</p>
     <h2 id="import-title">Import players</h2>

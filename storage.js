@@ -1,6 +1,7 @@
 import { restoreSession, serializeSession, normalizePlannedObstacles } from './placement.js';
 import { normalizeImportedPlayer, normalizeRosterContext } from './players.js';
 import { normalizeFreeLayout } from './free-formation.js';
+import { normalizeGridLayout } from './grid-layout.js';
 import { normalizeTilePlacements } from './tile-placement.js';
 
 export const STORAGE_KEY = 'basegrid.workspace.v1';
@@ -38,7 +39,8 @@ export function loadWorkspace(storage) {
   const draft = { ...saved.draft };
   if (draft.tilePlacements !== undefined) draft.tilePlacements = normalizeTilePlacements(draft.tilePlacements);
   if (draft.selectedPlayerId !== undefined && typeof draft.selectedPlayerId !== 'string') draft.selectedPlayerId = null;
-  if (draft.layout !== undefined) draft.layout = normalizeFreeLayout(draft.layout);
+  if (draft.layout !== undefined) draft.layout = draft.layout?.version === undefined
+    ? normalizeFreeLayout(draft.layout) : normalizeGridLayout(draft.layout);
   if (draft.rosterContext !== undefined) draft.rosterContext = normalizeRosterContext(draft.rosterContext);
   if (draft.plannedObstacles !== undefined) draft.plannedObstacles = normalizePlannedObstacles(draft.plannedObstacles);
   if (imported) draft.importedPlayers = imported.map(normalizeImportedPlayer);

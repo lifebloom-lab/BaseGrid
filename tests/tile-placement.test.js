@@ -31,7 +31,7 @@ test('copying does not confirm arrival; moving a copied base warns until updated
   assert.equal(tile(draft, 'lastwar:0').status, 'in-progress');
   draft = moveTile(draft, 'player', { column: 0, row: 0 }, { column: -2, row: 0 });
   assert.equal(tile(draft, 'lastwar:0').messageChanged, true);
-  assert.deepEqual(xy(draft, 'lastwar:0'), [404, 687]);
+  assert.deepEqual(xy(draft, 'lastwar:0'), [410, 687]);
   draft = recordCopiedMessage(draft, proposal(draft, 'lastwar:0'), 'ko');
   assert.equal(tile(draft, 'lastwar:0').messageChanged, false);
   assert.equal(draft.tilePlacements[0].copied.language, 'ko');
@@ -50,25 +50,73 @@ test('pending clipboard completion records the old coordinates after a move and 
 test('confirmed bases cannot be moved, swapped, or displaced by obstacles, while other bases remain movable', () => {
   let draft = confirm(initial(), 'lastwar:0');
   assert.throws(() => moveTile(draft, 'player', { column: 0, row: 0 }, { column: 3, row: 0 }), /confirmed/);
-  assert.throws(() => moveTile(draft, 'player', { column: 1, row: 0 }, { column: 0, row: 0 }), /confirmed/);
+  assert.throws(() => moveTile(draft, 'player', { column: 4, row: 0 }, { column: 2, row: 0 }), /confirmed/);
   assert.throws(() => moveTile(draft, 'new-obstacle', null, { column: 0, row: 0 }), /confirmed/);
-  draft = moveTile(draft, 'player', { column: 1, row: 0 }, { column: 3, row: 0 });
-  draft = moveTile(draft, 'new-obstacle', null, { column: 1, row: 1 });
+  draft = moveTile(draft, 'player', { column: 4, row: 0 }, { column: 3, row: 0 });
+  draft = moveTile(draft, 'new-obstacle', null, { column: 1, row: 3 }, 1);
   assert.deepEqual(xy(draft, 'lastwar:0'), [412, 687]);
   assert.equal(tile(draft, 'lastwar:0').status, 'placed');
   assert.equal(tile(draft, 'lastwar:1').column, 3);
 });
 
-test('swapping two in-progress players invalidates both copied messages and leaves their status intact', () => {
+test('partial overlaps without a swap target are rejected; a one-cell move updates only that player’s copied message', () => {
   let draft = initial();
   for (const id of ['lastwar:0', 'lastwar:1']) {
     draft = openTilePlacement(draft, id);
     draft = recordCopiedMessage(draft, proposal(draft, id), 'en');
+    assert.equal(tile(draft, id).messageChanged, false);
   }
+  const before = structuredClone(draft);
+  assert.throws(() => moveTile(draft, 'player', { column: 0, row: 0 }, { column: 2, row: 0 }), /overlap/);
+  assert.deepEqual(draft, before);
   draft = moveTile(draft, 'player', { column: 0, row: 0 }, { column: 1, row: 0 });
   for (const id of ['lastwar:0', 'lastwar:1']) {
-    assert.equal(tile(draft, id).messageChanged, true);
+    assert.equal(tile(draft, id).messageChanged, id === 'lastwar:0');
     assert.equal(tile(draft, id).status, 'in-progress');
+  }
+});
+
+test('swapping exchanges exact centers while retaining identity, metadata, progress, selection, and copied records', () => {
+  let draft = moveTile(initial(), 'new-obstacle', null, { column: 3, row: 1 }, 1);
+  draft = moveTile(draft, 'new-obstacle', null, { column: -4, row: -4 }, 3);
+  for (const id of ['lastwar:0', 'lastwar:1', 'lastwar:2']) {
+    draft = openTilePlacement(draft, id);
+    draft = recordCopiedMessage(draft, proposal(draft, id), 'en');
+  }
+  const before = structuredClone(draft);
+  const previous = getTilePlan(draft);
+  const swapped = moveTile(draft, 'player', { column: 0, row: 0 }, { column: 5, row: 1 });
+  assert.deepEqual(draft, before);
+  assert.deepEqual(xy(swapped, 'lastwar:0'), [416, 687]);
+  assert.deepEqual(xy(swapped, 'lastwar:1'), [412, 687]);
+  assert.deepEqual(getTilePlan(swapped).players, previous.players);
+  assert.deepEqual(swapped.tilePlacements, before.tilePlacements);
+  assert.equal(swapped.selectedPlayerId, before.selectedPlayerId);
+  for (const id of ['lastwar:0', 'lastwar:1']) {
+    assert.equal(tile(swapped, id).status, 'in-progress');
+    assert.equal(tile(swapped, id).messageChanged, true);
+  }
+  assert.deepEqual(getTilePlan(swapped).slots.slice(2), previous.slots.slice(2));
+  let raw;
+  const storage = { setItem: (_, value) => { raw = value; }, getItem: () => raw };
+  saveWorkspace(storage, swapped, null);
+  assert.deepEqual(getTilePlan(loadWorkspace(storage).draft), getTilePlan(swapped));
+  const restored = moveTile(swapped, 'player', { column: 4, row: 0 }, { column: 0, row: 0 });
+  assert.deepEqual(getTilePlan(restored), previous);
+});
+
+test('planned bases swap across negative coordinates and either confirmed participant blocks a swap', () => {
+  const draft = moveTile(initial(), 'player', { column: 0, row: 0 }, { column: -5, row: -7 });
+  const swapped = moveTile(draft, 'player', { column: -5, row: -7 }, { column: 4, row: 0 });
+  assert.deepEqual(xy(swapped, 'lastwar:0'), [416, 687]);
+  assert.deepEqual(xy(swapped, 'lastwar:1'), [407, 680]);
+  assert.equal(tile(swapped, 'lastwar:0').status, 'planned');
+  assert.equal(tile(swapped, 'lastwar:1').status, 'planned');
+  for (const id of ['lastwar:0', 'lastwar:1']) {
+    const locked = confirm(draft, id);
+    const before = structuredClone(locked);
+    assert.throws(() => moveTile(locked, 'player', { column: -5, row: -7 }, { column: 4, row: 0 }), /confirmed/);
+    assert.deepEqual(locked, before);
   }
 });
 
@@ -107,7 +155,7 @@ test('statuses, selected player, copied coordinates, metadata and custom positio
   let draft = confirm(initial(), 'lastwar:0');
   draft = openTilePlacement(draft, 'lastwar:2');
   draft = recordCopiedMessage(draft, proposal(draft, 'lastwar:2'), 'pt-BR');
-  draft = moveTile(draft, 'player', { column: 0, row: 1 }, { column: -1, row: 1 });
+  draft = moveTile(draft, 'player', { column: 0, row: 4 }, { column: -1, row: 4 });
   let raw;
   const storage = { setItem: (key, value) => { raw = value; }, getItem: () => raw };
   saveWorkspace(storage, draft, null);

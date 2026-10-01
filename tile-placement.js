@@ -1,5 +1,5 @@
 import { createSession, getFormation } from './placement.js';
-import { changeDraftFormation, normalizeFreeLayout, tilePosition, tileKey } from './free-formation.js';
+import { normalizeGridLayout, resolveGridLayout, layoutFromSlots, gridCoordinates, previewGridMove } from './grid-layout.js';
 import { playersFromDraft } from './players.js';
 
 function coordinates(value) {
@@ -27,13 +27,23 @@ export function getTilePlan(draft) {
   if ([draft.x, draft.y, draft.spacing].some(value => typeof value !== 'string' || !value.trim())) {
     throw new Error('Enter initial X, initial Y, and spacing.');
   }
+  const modern = draft.layout?.version === 2;
   const plan = createSession({ players: playersFromDraft(draft), x0: Number(draft.x), y0: Number(draft.y),
-    spacing: Number(draft.spacing), layout: draft.layout, plannedObstacles: draft.plannedObstacles });
+    spacing: Number(draft.spacing), layout: modern ? undefined : draft.layout,
+    plannedObstacles: modern ? [] : draft.plannedObstacles });
+  const layout = modern ? resolveGridLayout(plan.players, draft.layout, plan.columns, plan.spacing)
+    : layoutFromSlots(plan, getFormation(plan));
+  const players = new Map(plan.players.map(player => [player.id, player]));
+  const occupants = [
+    ...layout.players.map(tile => ({ ...tile, type: 'player', size: 3, name: players.get(tile.playerId).name })),
+    ...layout.obstacles.map(tile => ({ ...tile, type: 'obstacle' })),
+  ];
   const records = normalizeTilePlacements(draft.tilePlacements);
   const byId = new Map(records.map(record => [record.playerId, record]));
-  const slots = getFormation(plan).map(slot => {
+  const slots = occupants.map(occupant => {
+    const slot = { ...occupant, ...gridCoordinates(plan.origin, occupant) };
     const record = byId.get(slot.playerId);
-    return { ...slot, ...tilePosition(slot, plan.columns),
+    return { ...slot,
       status: slot.type === 'obstacle' ? 'blocked' : record?.status ?? 'planned',
       messageChanged: Boolean(record?.copied && (record.copied.x !== slot.x || record.copied.y !== slot.y || record.copied.name !== slot.name)),
     };
@@ -44,14 +54,11 @@ export function getTilePlan(draft) {
       throw new Error('Undo the affected player’s confirmation before changing their position or removing them.');
     }
   }
-  return { ...plan, slots };
+  return { ...plan, layout, slots };
 }
 
 function freezePositions(draft, plan) {
-  return { ...draft, orderedPlayers: plan.players, plannedObstacles: [], layout: normalizeFreeLayout({
-    players: plan.slots.filter(slot => slot.type === 'player').map(slot => ({ playerId: slot.playerId, ...tilePosition(slot, plan.columns) })),
-    obstacles: plan.slots.filter(slot => slot.type === 'obstacle').map(slot => tilePosition(slot, plan.columns)),
-  }) };
+  return { ...draft, orderedPlayers: plan.players, plannedObstacles: [], layout: layoutFromSlots(plan, plan.slots) };
 }
 
 function selectedTile(draft, playerId) {
@@ -102,13 +109,23 @@ export function recordCopiedMessage(draft, proposal, language) {
     copied: { ...coordinates(proposal), name: proposal.player.name, language } });
 }
 
-export function moveTile(draft, kind, from, to) {
+export function moveTile(draft, kind, from, to, size = 3) {
   const plan = getTilePlan(draft);
-  const locked = plan.slots.filter(slot => slot.status === 'placed');
-  if (locked.some(slot => (from && tileKey(slot) === tileKey(from)) || (to && tileKey(slot) === tileKey(to)))) {
-    throw new Error('This base is confirmed. Undo its confirmation before moving it or using its tile.');
+  const preview = previewGridMove(plan, kind, from, to, size);
+  if (!preview.valid) throw new Error(preview.error);
+  const next = freezePositions(draft, plan);
+  const same = tile => tile.column === from?.column && tile.row === from?.row;
+  const destination = preview.to ?? to;
+  if (kind === 'player') {
+    const source = next.layout.players.find(same);
+    const target = preview.swap && next.layout.players.find(tile => tile.playerId === preview.swap.playerId);
+    if (target) Object.assign(target, { column: source.column, row: source.row });
+    Object.assign(source, { column: destination.column, row: destination.row });
+  } else {
+    if (kind === 'obstacle') next.layout.obstacles = next.layout.obstacles.filter(tile => !same(tile));
+    if (destination) next.layout.obstacles.push({ column: destination.column, row: destination.row, size: preview.size });
   }
-  const next = changeDraftFormation(draft, plan, plan.slots, kind, from, to);
+  next.layout = normalizeGridLayout(next.layout);
   getTilePlan(next); // Enforce locks and coordinate validity before saving.
   return next;
 }
@@ -119,6 +136,7 @@ export function updateTileDraft(draft, patch) {
   const ids = new Set(players.map(player => player.id));
   const records = normalizeTilePlacements(draft.tilePlacements);
   if (records.some(record => record.status === 'placed')) {
+    if (patch.spacing !== undefined && patch.spacing !== draft.spacing) throw new Error('Undo confirmations before changing spacing.');
     getTilePlan(next);
     const oldNames = new Map(playersFromDraft(draft).map(player => [player.id, player.name]));
     if (records.some(record => record.status === 'placed' && players.find(player => player.id === record.playerId)?.name !== oldNames.get(record.playerId))) {
@@ -136,8 +154,14 @@ export function resetTileProgress(draft) {
 
 /** Upgrade a saved sequential session without losing confirmed bases or discovered obstacles. */
 export function migrateTileWorkspace(draft, session) {
-  if (!session) return draft;
-  const slots = getFormation(session).map(slot => ({ ...slot, ...tilePosition(slot, session.columns) }));
+  if (!session) {
+    if (draft.layout?.version === 2 || (!draft.layout && !draft.plannedObstacles?.length)) return draft;
+    // An unfinished setup remains editable; convert once its inputs form a valid plan.
+    if (!playersFromDraft(draft).length || [draft.x, draft.y, draft.spacing].some(value =>
+      typeof value !== 'string' || !value.trim() || !Number.isSafeInteger(Number(value))) || Number(draft.spacing) < 0) return draft;
+    return freezePositions(draft, getTilePlan(draft));
+  }
+  const slots = getFormation(session);
   const next = freezePositions({ ...draft, names: session.players.map(player => player.name).join('\n'),
     x: String(session.origin.x), y: String(session.origin.y), spacing: String(session.spacing),
     selectedPlayerId: null, tilePlacements: slots.filter(slot => slot.type === 'player' && slot.status === 'placed')

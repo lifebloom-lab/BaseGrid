@@ -18,7 +18,7 @@ export function tileToCoordinate({ origin, spacing }, { column, row }) {
   };
 }
 
-/** The single boundary for interpreting map coordinates; currently upper-left. */
+/** Legacy coarse-slot targets; their numeric coordinates are preserved on upgrade. */
 export function slotToCoordinate({ origin, spacing, columns }, slotIndex) {
   integer(slotIndex, 'Slot index', 0);
   integer(columns, 'Columns', 1);

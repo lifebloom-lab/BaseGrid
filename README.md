@@ -18,23 +18,25 @@ To use the app on a phone on the same trusted Wi-Fi network, run `python3 server
 
 ## Use
 
-1. Enter player names, one per line, plus initial X/Y and spacing, or import a saved alliance roster.
-2. Drag bases to shape the formation. Drop onto another unconfirmed player to swap positions. Empty tiles stay empty, including outside the original rectangle. **＋ More space** extends the map.
+1. Enter player names, one per line, plus initial X/Y and spacing, or import a saved alliance roster. Initial X/Y is the center tile of the first base: a base at (412, 687) occupies X 411–413 and Y 686–688. Tile labels, drag previews, messages, and confirmations all use center coordinates.
+2. Drag bases one tile at a time to shape the formation. Each base occupies 3 × 3 tiles. Drop onto another unconfirmed base to swap their exact positions; the preview names the player you will swap with. Confirmed bases stay locked, and obstacles cannot be swapped. A green footprint fits or swaps; a red footprint is blocked. Empty tiles stay empty, including outside the original rectangle. **＋ More space** extends the map.
 3. Choose **Place** on any player's tile. The side panel shows their coordinates and a suggested message. Select a language flag, then **Copy message** and paste it into your chat.
 4. When the player actually arrives, select **Player has moved here**. Their tile becomes green and locks. Other bases remain movable.
 5. Use **Continue** for a player in progress, or **View** on a placed base to review it and **Undo confirmation**. Several players can be in progress at once.
 
-Planned tiles are neutral, in-progress tiles are amber, and confirmed tiles are green. The counts above the map track each state. Copying does not confirm a placement or send a message. If you move a base after copying its message, the tile and side panel remind you to copy the updated coordinates. Swaps update both affected players.
+Choose **Full screen** in the Formation header to fill the browser window with the map and its tools. Dragging, obstacles, and local saving work in this view. Place, Continue, and View open the player's message and placement status in a pop-up over the map. Copy a translated message, confirm arrival, or undo confirmation without leaving full screen. **Back to map** or Escape closes the pop-up and returns to the same map position. **Exit full screen** or Escape from the map returns to the normal layout; if a move is active, the first Escape cancels that move.
+
+Planned tiles are neutral, in-progress tiles are blue, and confirmed tiles are green. Obstacles are amber with diagonal stripes. The counts above the map track each state. R labels use consistent colored badges on tiles, in the player panel, and in confirmed coordinates: R1 slate, R2 teal, R3 blue, R4 purple, and R5 gold. Missing groups remain labeled unknown. Copying does not confirm a placement or send a message. If you move a base after copying its message, the tile and side panel remind you to copy the updated coordinates. Other players keep their positions and copy status.
 
 Messages support English, Spanish, Brazilian Portuguese, French, Korean, German, Japanese, and Simplified Chinese. Language names appear on hover and are available to screen readers. Translations are built in and use no API calls. The selected language persists separately from the plan. If clipboard access is unavailable, select and copy the message manually.
 
 On touch screens, drag the ⠿ handle; the rest of each card allows scrolling. With a keyboard, focus a handle, press Space or Enter, use arrow keys (or Home/End), then Space or Enter to drop. Escape or dropping outside the map cancels. Confirmed tiles cannot be moved or used as drop destinations.
 
-Drag **✕ Obstacle** onto an empty or unconfirmed player tile, or click it and then choose a tile. A player at the target moves to a free position; moving an existing obstacle onto a player swaps them. Other assignments stay fixed. Obstacles can extend beyond the original rectangle and be removed using **Remove**. Keyboard movement also works for obstacles.
+Choose **✕ Obstacle 1 × 1** for a small blocker or **✕ Obstacle 3 × 3** for a larger one. Drag it onto an empty area, or click the button and then choose an area. The entire footprint must be clear; obstacles never displace players. They can extend beyond the original rectangle and be moved or removed with **Remove** (× on a small obstacle). Keyboard movement also works for both sizes.
 
 **Back to setup** closes the player panel without changing their status. **Back to planned** cancels an unconfirmed placement. **Reset placement progress** unlocks all bases and clears their progress while retaining the roster, positions, and obstacles. **Clear formation** removes the current plan; saved API rosters and language preferences remain available. Both resets require confirmation.
 
-Positions, per-player progress, copied coordinates, selection, player IDs, HQ levels, and groups save locally without API calls. Confirmed bases prevent roster replacement and changes to the origin or spacing; undo confirmations or reset progress before changing those settings. Older saved sequential sessions upgrade automatically, preserving confirmed positions and obstacles.
+Positions, per-player progress, copied coordinates, selection, player IDs, HQ levels, and groups save locally without API calls. Confirmed bases prevent roster replacement and changes to the origin or spacing; undo confirmations or reset progress before changing those settings. Older saved plans and sequential sessions upgrade automatically, preserving actual X/Y coordinates, confirmed positions, and copied messages. Existing obstacles become 3 × 3 footprints.
 
 ## Import alliance players
 
@@ -76,7 +78,8 @@ lastwar-api.js            Alliance/member API client and response validation
 import-ui.js              Import dialog, request cancellation, roster review
 roster-cache.js           Local roster/search library; explicit refresh only
 reorder-ui.js             Mouse/touch dragging and accessible keyboard reordering
-free-formation.js         Signed grid positions, swaps, collisions, and expandable preview
+grid-layout.js           Unit grid, footprint collisions, obstacle sizes, and canvas bounds
+free-formation.js         Legacy coarse-slot layout support for saved-plan migration
 placement-messages.js     Translated placement messages, language preference, and copying
 server.py                 Static server and read-only API relay (Python stdlib)
 worker.js                 Cloudflare read-only API relay and asset binding
@@ -84,6 +87,7 @@ wrangler.jsonc            Cloudflare deployment configuration
 scripts/build.mjs         Copies only public app assets into dist/
 tests/worker.test.js      Cloudflare routes, client integration, errors, and request limits
 tests/tile-placement.test.js Independent placement, locks, copy warnings, migration, and persistence
+tests/grid-layout.test.js Unit snapping, footprint collisions, both obstacle sizes, and saved-plan upgrades
 tests/placement.test.js  Legacy engine and input-adapter tests
 tests/storage.test.js    Persistence and reset tests
 tests/lastwar-api.test.js API client, errors, sorting, and imported records
@@ -96,13 +100,15 @@ package.json             Test/build commands and Wrangler deployment tool
 
 ## Placement model
 
-The default rectangle has `ceil(sqrt(playerCount))` columns, with a coordinate step of `3 + spacing`. Custom layouts store signed `{column, row}` positions keyed by player ID, plus obstacle positions, independently of the visible canvas bounds. Visual cells represent whole bases. The map provides empty drop targets around occupied tiles; very wide saved layouts use sparse cells.
+The initial rectangle has `ceil(sqrt(playerCount))` base columns with `spacing` empty cells between 3 × 3 bases. Layout version 2 stores signed `{column, row}` offsets for footprint corners relative to the first base's corner, keyed by player ID; obstacles additionally store `size: 1 | 3`. The origin is the first base's center, so cell (0, 0) is at (origin.x − 1, origin.y − 1). Reported X/Y identifies the center of each footprint, including both obstacle sizes. Existing base targets, copied messages, confirmations, and relative geometry are preserved; 1 × 1 obstacle labels now use the corrected cell coordinates. Once arranged, changing spacing affects new roster additions rather than rescaling existing positions. Manual moves always snap to one coordinate.
 
-`tile-placement.js` stores independent records for players in progress or placed; absence of a record means Planned. Starting placement captures the formation's current positions. Confirming stores the exact X/Y as a lock. All moves, swaps, obstacle edits, and setup edits preserve confirmed coordinates. Undo affects only the selected player.
+Collision checks compare full square footprints and allow edge contact and a moving object's own previous area. Dropping a base onto another unconfirmed base exchanges their exact positions; no other occupant moves. A pointer over a base snaps the swap preview to that base; keyboard movement offers a swap when the candidate center enters it. Partial overlaps without a swap target remain blocked. Status, rank, and HQ remain attached to each player, and copied messages become stale for both swapped players. Pointer and keyboard previews use the same validation as committed moves. The canvas renders only occupants and a drop preview over a subtle CSS grid, so empty map cells do not create thousands of DOM nodes.
+
+`tile-placement.js` stores independent records for players in progress or placed; absence of a record means Planned. Starting placement captures the formation's current positions. Confirming stores the exact X/Y as a lock. All moves, obstacle edits, and setup edits preserve confirmed coordinates. Undo affects only the selected player.
 
 Copy records store the actual coordinates, name, and language copied. Comparing them with the current tile detects stale messages, including when an asynchronous clipboard write finishes after a move. Copying never confirms arrival.
 
-The workspace retains its versioned local storage format. Legacy sequential sessions are read by `placement.js` and migrated into explicit positions and independent confirmations. Its original action replay and tests remain for backward compatibility. New saves use draft layout and tile placement records with no sequential session.
+The workspace retains its versioned local storage format. Legacy sequential sessions are read by `placement.js` and migrated into explicit positions and independent confirmations. Earlier coarse-slot layouts are converted using their actual coordinates, with obstacles upgraded to size 3; a layout version marker prevents repeated conversion. The workspace storage key stays the same, so existing browser data remains available. Its original action replay and tests remain for backward compatibility. New saves use draft layout and tile placement records with no sequential session.
 
 Initial X/Y accept safe whole numbers, including zero and negatives; spacing must be a non-negative whole number. Unsafe arithmetic and overlapping positions are rejected. No game-specific map bounds are assumed. Player metadata is retained without interpreting rank codes as placement priority.
 
@@ -143,7 +149,7 @@ The repository is ready for a **Worker with Static Assets**. It hosts the planne
 
 Use Workers, including the Worker script, so `/api/lastwar/…` is available. A static-only upload or GitHub Pages cannot run the import relay. Cloudflare installs the pinned deployment tool from this repository. The explicit build command is needed for the dashboard build pipeline; `wrangler.jsonc` also runs the build for local Wrangler commands.
 
-The build copies only the 13 public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
+The build copies only the 14 public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
 
 Saved plans and rosters remain in the visitor's browser. The Cloudflare address has its own storage: existing localhost data does not automatically move to the hosted app. Use the same hosted address consistently to reuse its saved rosters without calling the API again.
 
