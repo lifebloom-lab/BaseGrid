@@ -24,8 +24,8 @@
     </section>
     <p id="notice" class="notice" role="status" hidden></p>
     <p id="error" class="error" role="alert" hidden></p>
-    <div class="workspace">
-      <aside class="controls">
+    <div id="workspace" class="workspace is-welcoming">
+      <aside id="planner-controls" class="controls" hidden>
         <section id="player-message-panel" class="panel player-message-panel" aria-labelledby="player-message-title" hidden>
           <div class="message-heading"><p id="selected-status" class="eyebrow">IN PROGRESS</p><button id="close-placement" class="text-button" type="button">Back to setup</button></div>
           <h2 id="player-message-title" tabindex="-1"></h2>
@@ -67,10 +67,11 @@
       </aside>
 
       <div class="formation-column">
-        <section id="formation-panel" class="panel formation-panel" aria-labelledby="formation-title">
+        <section id="formation-panel" class="panel formation-panel" aria-labelledby="welcome-title">
           <div class="formation-heading"><div><p class="eyebrow">THE BIG PICTURE</p><h2 id="formation-title">Formation</h2></div><div class="formation-heading-actions"><span id="grid-size" class="grid-size">Awaiting roster</span><button id="formation-fullscreen-toggle" class="button secondary formation-expand" type="button" aria-expanded="false" aria-controls="formation-fullscreen" title="Expand formation to fill the window"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path id="formation-expand-icon" d="M7 3H3v4m10-4h4v4M3 13v4h4m6 0h4v-4"/></svg><span id="formation-expand-label">Full screen</span></button></div></div>
           <div class="placement-overview"><p id="placement-count" role="status">0 placed · 0 in progress · 0 remaining</p><progress id="placement-progress" max="1" value="0" aria-label="Players placed"></progress></div>
           <div class="legend" aria-label="Slot legend"><span><i class="legend-pending"></i>Planned</span><span><i class="legend-progress"></i>In progress</span><span><i class="legend-placed"></i>Placed</span><span><i class="legend-blocked"></i>Obstacle</span></div>
+          <p id="formation-next-step" class="formation-next-step" tabindex="-1" hidden><strong>Next: arrange your bases</strong>Set your starting coordinates, then use Auto place or add bases individually.</p>
           <div id="base-pool" class="base-pool" hidden>
             <div class="pool-heading"><label for="pool-player">Base pool <span id="pool-count"></span></label><button id="auto-place" class="button secondary" type="button">Auto place</button></div>
             <div class="pool-picker"><div class="pool-select"><select id="pool-player" aria-describedby="pool-help"></select><svg class="pool-chevron" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></div><button id="add-base" class="button primary base-tool" data-size="3" type="button" aria-pressed="false" aria-describedby="pool-help reorder-help">＋ Add base</button></div>
@@ -79,7 +80,31 @@
           <div id="obstacle-tools" class="obstacle-tools" hidden><button id="add-obstacle" class="button obstacle-button obstacle-tool" data-size="1" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle 1 × 1</button><button id="add-large-obstacle" class="button obstacle-button obstacle-tool" data-size="3" type="button" aria-pressed="false" aria-describedby="reorder-help" disabled>✕ Obstacle 3 × 3</button><button id="expand-map" class="button secondary" type="button">＋ More space</button><span>Drag an obstacle, or click then choose an empty area.</span></div>
           <p id="reorder-help" class="reorder-help" hidden>Drop onto another base to swap positions. Base coordinates mark the center of each 3 × 3 base.<span>Confirmed bases stay locked. Green previews fit; red previews are blocked. Touch: drag ⠿. Keyboard: focus a handle or obstacle button, press Space, use arrow keys, then Space to drop. Escape cancels. More space extends the map.</span></p>
           <p id="reorder-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
-          <div id="map-empty" class="map-empty"><span class="empty-grid" aria-hidden="true">▦</span><h3>Your alliance, aligned.</h3><p>Add your roster, then auto place your bases<br>or add them one at a time from the pool.</p></div>
+          <div id="map-empty" class="map-empty">
+            <section id="welcome-panel" class="welcome-panel" aria-labelledby="welcome-title">
+              <p class="eyebrow">GET STARTED</p>
+              <h2 id="welcome-title" tabindex="-1">Plan your alliance’s formation</h2>
+              <p class="welcome-intro">Add players, arrange bases, then copy instructions to share with your alliance.</p>
+              <div class="welcome-options">
+                <section class="welcome-option" aria-labelledby="welcome-manual-title">
+                  <svg class="welcome-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                  <h3 id="welcome-manual-title">Add names manually</h3>
+                  <p>Type or paste player names, one per line. No account needed.</p>
+                  <button id="welcome-manual" class="button secondary" type="button">Enter player names</button>
+                </section>
+                <section class="welcome-option" aria-labelledby="welcome-import-title">
+                  <svg class="welcome-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v4h16v-4"/></svg>
+                  <h3 id="welcome-import-title">Import your alliance</h3>
+                  <p>Load player names, HQ levels, and ranks with a LastWarTools API key.</p>
+                  <p class="welcome-key-help">Free registration includes a daily allowance. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get a free API key ↗</a></p>
+                  <p id="welcome-saved-rosters" class="welcome-saved-rosters" hidden>Saved rosters available. No API calls needed.</p>
+                  <button id="welcome-import" class="button primary" type="button">Import players</button>
+                </section>
+              </div>
+              <p class="welcome-device-note">Your plan is saved in this browser.</p>
+            </section>
+            <div id="manual-empty" hidden><span class="empty-grid" aria-hidden="true">▦</span><h3 id="manual-empty-title">Start with your players</h3><p id="manual-empty-help">Enter one player name per line in the Player names field.</p><button id="choose-setup-method" class="text-button" type="button">Choose another option</button></div>
+          </div>
           <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
           <div class="map-footer"><span id="formation-summary">Add players to start shaping your formation.</span><span class="map-orientation">X → <span aria-hidden="true">/</span> Y ↓</span></div>
         </section>
@@ -106,72 +131,76 @@
     </form>
   </dialog>
   <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title" aria-describedby="import-description">
-    <p class="eyebrow">ALLIANCE ROSTER</p>
     <h2 id="import-title">Import players</h2>
-    <p id="import-description">Reuse a saved roster or find your alliance. Saved data uses no API calls.</p>
+    <p id="import-description">Find your alliance, then review its players.</p>
+    <ol id="import-steps" class="import-steps" aria-label="Import progress">
+      <li data-step="1" aria-current="step"><span>1</span> Server</li><li data-step="2"><span>2</span> Alliance</li><li data-step="3"><span>3</span> Review</li>
+    </ol>
     <form id="import-form" novalidate>
-      <div id="saved-rosters" class="import-field" hidden>
-        <label for="saved-roster">Saved roster</label>
-        <select id="saved-roster"></select>
-        <p class="field-help">Kept in this browser, even when you reset or clear a formation.</p>
-      </div>
       <p id="import-cache-warning" class="notice" role="status" hidden></p>
-      <details id="import-lookup" class="import-direct" open>
-        <summary>Find another alliance or refresh data</summary>
-      <div class="import-field">
-        <label for="import-key">LastWarTools API key</label>
-        <input id="import-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="import-key-help" autofocus>
-        <p id="import-key-help" class="field-help">Sent to LastWarTools only for these lookups; never saved by BaseGrid. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key</a>.</p>
-      </div>
-      <div class="import-search">
-        <div class="import-field">
-          <label for="import-server">Server number</label>
-          <input id="import-server" type="number" inputmode="numeric" min="1" max="9999999999" step="1" placeholder="e.g. 1234" required>
-        </div>
-        <button id="find-alliances" class="button secondary" type="submit">Find alliances</button>
-      </div>
-      <div id="import-selection" class="import-field" hidden>
-        <label for="import-alliance">Alliance</label>
-        <select id="import-alliance"><option value="">Choose an alliance…</option></select>
-        <p class="field-help">Showing up to 200 ranked alliances on this server.</p>
-        <p id="alliance-cache-status" class="field-help" role="status" hidden></p>
-        <button id="refresh-alliances" class="text-button" type="button">Refresh alliances · 1 API call</button>
-      </div>
-      <details id="import-direct" class="import-direct">
-        <summary>Have an alliance ID instead?</summary>
-        <div class="import-field">
-          <label for="import-alliance-id">Alliance ID</label>
-          <input id="import-alliance-id" type="text" autocomplete="off" spellcheck="false" maxlength="32" aria-describedby="import-id-help">
-          <p id="import-id-help" class="field-help">The 32-character ID from LastWarTools. Useful if your alliance is missing from the rankings.</p>
-        </div>
-      </details>
-      <button id="load-roster" class="button primary" type="button" disabled>Load players</button>
-      <p class="field-help">Lookups use saved results first. New lookups use 1 API call each.</p>
-      </details>
-      <p id="import-status" class="import-status" role="status" hidden></p>
-      <p id="import-error" class="error" role="alert" hidden></p>
-      <section id="import-preview" class="import-preview" aria-labelledby="import-preview-title" hidden>
-        <h3 id="import-preview-title" tabindex="-1">Review players</h3>
-        <p id="import-roster-context" class="import-roster-context"></p>
-        <p id="roster-cache-status" class="field-help" role="status"></p>
-        <button id="refresh-roster" class="text-button" type="button">Refresh players · 1 API call</button>
-        <div class="import-field">
-          <label for="import-order">Placement order</label>
-          <select id="import-order"><option value="power">Power · highest first</option><option value="name">Name · A–Z</option></select>
-        </div>
-        <ol id="import-preview-list" class="import-preview-list" tabindex="0" aria-label="Players in placement order"></ol>
-        <p class="field-help">HQ levels and groups stay with each player in your plan. Group numbers come from LastWarTools and may differ from the R1–R5 labels in game.</p>
-        <p id="import-metadata-note" class="field-help" role="status" hidden></p>
-        <p id="import-replace-note" class="field-help"></p>
-        <button id="confirm-import" class="button primary" type="button" disabled>Use these players</button>
+      <section id="saved-rosters" aria-labelledby="saved-roster-title" hidden>
+        <h3 id="saved-roster-title" tabindex="-1">Use a saved roster</h3>
+        <div class="import-field"><label for="saved-roster">Saved roster</label><select id="saved-roster"></select><p class="field-help">No API key or API calls needed.</p></div>
+        <button id="find-another-alliance" class="button secondary" type="button">Find an alliance</button>
       </section>
+      <div id="import-context" class="import-context" hidden>
+        <div><span id="import-server-summary"></span><button id="change-import-server" class="text-button" type="button">Change server</button></div>
+        <div id="import-alliance-summary-row" hidden><span id="import-alliance-summary"></span><button id="change-import-alliance" class="text-button" type="button">Change alliance</button></div>
+      </div>
+      <section id="import-server-step" aria-labelledby="import-server-title">
+        <h3 id="import-server-title" tabindex="-1">Find your server</h3>
+        <div class="import-field"><label for="import-server">Server number</label><input id="import-server" type="number" inputmode="numeric" min="1" max="9999999999" step="1" placeholder="e.g. 1786" required></div>
+        <div id="import-credentials-1">
+          <div id="import-key-field" class="import-field">
+            <label for="import-key">LastWarTools API key</label>
+            <input id="import-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="import-key-help">
+            <p id="import-key-help" class="field-help">Used for lookups. Never saved. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key</a></p>
+          </div>
+        </div>
+      </section>
+      <section id="import-alliance-step" aria-labelledby="import-alliance-title" hidden>
+        <h3 id="import-alliance-title" tabindex="-1">Choose your alliance</h3>
+        <div id="import-selection" class="import-field">
+          <label for="import-alliance">Alliance</label><select id="import-alliance"><option value="">Choose an alliance…</option></select>
+        </div>
+        <p id="import-no-alliances" class="field-help" hidden>No alliances found. Check the server or enter an alliance ID.</p>
+        <details id="import-direct" class="import-direct">
+          <summary>Can’t find your alliance?</summary>
+          <p class="field-help">Up to 200 ranked alliances per server.</p>
+          <p id="alliance-cache-status" class="field-help"></p>
+          <button id="refresh-alliances" class="text-button" type="button">Refresh alliances · 1 API call</button>
+          <div class="import-field"><label for="import-alliance-id">Alliance ID</label><input id="import-alliance-id" type="text" autocomplete="off" spellcheck="false" maxlength="32" pattern="[a-fA-F0-9]{32}" aria-describedby="import-id-help"><p id="import-id-help" class="field-help">Enter its 32-character ID from LastWarTools.</p></div>
+        </details>
+        <div id="import-credentials-2"></div>
+      </section>
+      <section id="import-preview" aria-labelledby="import-preview-title" hidden>
+        <h3 id="import-preview-title" tabindex="-1">Review players</h3>
+        <p id="roster-cache-status" class="field-help"></p>
+        <button id="refresh-roster" class="text-button" type="button">Refresh players · 1 API call</button>
+        <div id="import-credentials-3"></div>
+        <details id="import-player-details" class="import-direct">
+          <summary id="import-list-summary">View players</summary>
+          <div class="import-field"><label for="import-order">Placement order</label><select id="import-order"><option value="power">Power · highest first</option><option value="name">Name · A–Z</option></select></div>
+          <ol id="import-preview-list" class="import-preview-list" tabindex="0" aria-label="Players in placement order"></ol>
+          <p id="import-metadata-note" class="field-help" hidden></p>
+        </details>
+        <p id="import-replace-note" class="field-help" hidden>This replaces your current roster.</p>
+      </section>
+      <p id="import-error" class="error" role="alert" hidden></p>
+      <p id="import-status" class="sr-only" role="status" aria-live="polite"></p>
+      <p id="import-action-help" class="field-help import-action-help">Saved results first. A new search uses 1 API call.</p>
       <div class="import-dialog-footer">
-        <span>Independent community API.<br>Lookups use your API allowance.</span>
-        <button id="cancel-import" class="button secondary" type="button">Cancel</button>
+        <button id="import-back" class="button secondary" type="button" hidden>Back</button>
+        <div class="import-next-actions">
+          <button id="cancel-import" class="button secondary" type="button">Cancel</button>
+          <button id="find-alliances" class="button primary" type="submit">Find alliances</button>
+          <button id="load-roster" class="button primary" type="submit" hidden>Load players</button>
+          <button id="confirm-import" class="button primary" type="submit" hidden>Add players</button>
+        </div>
       </div>
     </form>
   </dialog>
-  <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description"><h2 id="reset-title">Clear this formation?</h2><p id="reset-description">This removes the saved session and all placements. Your roster and starting point will stay in the form for a new plan.</p><form method="dialog"><button class="button secondary" value="cancel" autofocus>Keep planning</button><button class="button reset-confirm" value="reset">Reset formation</button></form></dialog>
+  <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description"><h2 id="reset-title">Clear this formation?</h2><p id="reset-description">This removes the current roster, positions, obstacles, and placement progress. Saved imported rosters stay available. You’ll return to Get started.</p><form method="dialog"><button class="button secondary" value="cancel" autofocus>Keep planning</button><button class="button reset-confirm" value="reset">Clear formation</button></form></dialog>
   <noscript><p class="notice">Enable JavaScript to use the placement planner.</p></noscript>
 </body>
 </html>

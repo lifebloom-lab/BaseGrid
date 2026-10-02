@@ -2,7 +2,7 @@ import { orderPlayers } from './lastwar-api.js';
 import { playerDetails, rosterContextLabels } from './players.js';
 import { createRosterCache } from './roster-cache.js';
 
-/** The dialog holds credentials only while open; the caller receives player records. */
+/** A single active step; credentials only live while the dialog is open. */
 export function setupRosterImport({ onImport, hasRoster, previousPlayers, previousContext }) {
   const byId = id => document.getElementById(id);
   const dialog = byId('import-dialog');
@@ -13,10 +13,15 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
   const directId = byId('import-alliance-id');
   const order = byId('import-order');
   const savedSelection = byId('saved-roster');
+  let step = 1;
+  let savedRosters = [];
   let alliances = [];
   let allianceServerId = null;
   let players = [];
   let activeRoster = null;
+  let fromSaved = false;
+  let credentialsStep = null;
+  let keyAction = null;
   let request = null;
   const cache = createRosterCache({ onWarning: value => message('import-cache-warning', value) });
   cache.preservePreviousImport(previousPlayers, previousContext);
@@ -26,11 +31,87 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     byId(id).hidden = !value;
   }
 
+  const selectedId = () => (directId.value.trim() || selection.value).toLowerCase();
+  const stepTitle = () => ({ saved: 'saved-roster-title', 1: 'import-server-title', 2: 'import-alliance-title', 3: 'import-preview-title' })[step];
+
+  function render() {
+    const busy = Boolean(request);
+    const cachedServer = cache.getAlliances(server.value);
+    const id = selectedId();
+    const cachedRoster = id && cache.getRoster(id);
+    form.setAttribute('aria-busy', String(busy));
+    byId('saved-rosters').hidden = step !== 'saved';
+    byId('import-server-step').hidden = step !== 1;
+    byId('import-alliance-step').hidden = step !== 2;
+    byId('import-preview').hidden = step !== 3;
+    byId('import-steps').hidden = step === 'saved';
+    byId('import-description').textContent = step === 'saved' ? 'Use saved players or find your alliance.' : 'Find your alliance, then review its players.';
+    for (const item of byId('import-steps').children) {
+      const number = Number(item.dataset.step);
+      item.classList.toggle('import-step-complete', number < step);
+      if (number === step) item.setAttribute('aria-current', 'step');
+      else item.removeAttribute('aria-current');
+    }
+    byId('import-context').hidden = step !== 2 && step !== 3;
+    const labels = rosterContextLabels(step === 3 ? activeRoster?.context : { serverId: allianceServerId });
+    byId('import-server-summary').textContent = `Server ${labels.server}`;
+    byId('change-import-server').hidden = step === 3 && fromSaved;
+    byId('import-alliance-summary-row').hidden = step !== 3;
+    byId('import-alliance-summary').textContent = labels.alliance;
+    byId('change-import-alliance').textContent = fromSaved ? 'Change roster' : 'Change alliance';
+    byId('import-selection').hidden = !alliances.length;
+    byId('import-no-alliances').hidden = Boolean(alliances.length);
+    byId('import-replace-note').hidden = !hasRoster();
+    byId('import-back').hidden = step === 'saved' || (step === 1 && !savedRosters.length);
+
+    // Keep an exposed key field visible while it is being edited.
+    if (step === 1 || (step === 2 && id && !cachedRoster && !key.value.trim())) credentialsStep = step;
+    const showKey = step !== 'saved' && credentialsStep === step && !(step === 1 && cachedServer);
+    if (step !== 'saved') byId(`import-credentials-${step}`).append(byId('import-key-field'));
+    byId('import-key-field').hidden = !showKey;
+    for (const input of [key, server, selection, directId, order, savedSelection]) input.disabled = busy;
+
+    const actions = {
+      'find-alliances': { visible: step === 1, label: 'Find alliances' },
+      'load-roster': { visible: step === 2 && Boolean(id), label: 'Load players' },
+      'confirm-import': { visible: step === 3, label: `Add ${players.length} ${players.length === 1 ? 'player' : 'players'}` },
+      'refresh-alliances': { visible: step === 2, label: 'Refresh alliances · 1 API call' },
+      'refresh-roster': { visible: step === 3 && activeRoster?.id !== 'previous-import', label: 'Refresh players · 1 API call' },
+    };
+    for (const [buttonId, action] of Object.entries(actions)) {
+      const button = byId(buttonId);
+      button.hidden = !action.visible;
+      button.disabled = busy || (buttonId === 'confirm-import' && !players.length);
+      const loading = request?.buttonId === buttonId;
+      button.textContent = loading ? request.label : action.label;
+      button.classList.toggle('is-loading', loading);
+      button.setAttribute('aria-busy', String(loading));
+    }
+    message('import-action-help', step === 1 ? cachedServer
+      ? 'Saved alliances available. No API call.' : 'Saved results first. A new search uses 1 API call.'
+      : step === 2 && id ? cachedRoster ? 'Saved players available. No API call.' : 'Loading players uses 1 API call.'
+      : step === 3 ? 'Players will be added to your base pool.' : '');
+  }
+
+  function cancelRequest() {
+    request?.controller.abort();
+    request = null;
+    message('import-status');
+  }
+
+  function goTo(nextStep, focus = true) {
+    cancelRequest();
+    message('import-error');
+    credentialsStep = null;
+    keyAction = null;
+    step = nextStep;
+    render();
+    if (focus) byId(stepTitle()).focus();
+  }
+
   function clearPreview() {
     players = [];
     activeRoster = null;
-    byId('import-preview').hidden = true;
-    byId('confirm-import').disabled = true;
     byId('import-preview-list').replaceChildren();
   }
 
@@ -38,166 +119,156 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     alliances = [];
     allianceServerId = null;
     selection.replaceChildren(new Option('Choose an alliance…', ''));
-    byId('import-selection').hidden = true;
     clearPreview();
   }
 
-  function cancelRequest() {
-    request?.abort();
-    request = null;
-    setBusy(false);
-    message('import-status');
-  }
-
-  function setBusy(busy) {
-    form.setAttribute('aria-busy', String(busy));
-    byId('find-alliances').disabled = busy;
-    byId('refresh-alliances').disabled = busy;
-    byId('refresh-roster').disabled = busy || !activeRoster || activeRoster.id === 'previous-import';
-    byId('load-roster').disabled = busy || !(selection.value || directId.value.trim());
-    byId('confirm-import').disabled = busy || !players.length;
-  }
-
-  async function run(task, status) {
+  async function run(buttonId, label, task) {
     if (request) return;
     message('import-error');
     const controller = new AbortController();
-    request = controller;
-    setBusy(true);
-    message('import-status', `${status} Please wait.`);
+    const pending = { controller, buttonId, label };
+    request = pending;
+    render();
+    message('import-status', label);
+    let focusId;
     try {
-      await task({ apiKey: key.value, signal: controller.signal }, controller);
+      focusId = await task({ apiKey: key.value, signal: controller.signal }, () => request === pending && dialog.open);
     } catch (error) {
-      if (request === controller && error.name !== 'AbortError') message('import-error', error.message);
+      if (request === pending && error.name !== 'AbortError') {
+        message('import-error', error.message);
+        if (/key/i.test(error.message)) { credentialsStep = step; keyAction = buttonId; }
+      }
     } finally {
-      if (request === controller) {
+      if (request === pending) {
         request = null;
-        setBusy(false);
         message('import-status');
+        render();
+        if (focusId) byId(focusId).focus();
       }
     }
   }
 
+  function requireKey(action) {
+    if (key.value.trim()) return true;
+    credentialsStep = step;
+    keyAction = action;
+    render();
+    message('import-error', 'Enter your API key to load new data.');
+    key.focus();
+    return false;
+  }
+
+  function savedDescription(entry) {
+    const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.savedAt));
+    return `${entry.persisted ? 'Saved on this device' : 'Available this visit'} · ${date}`;
+  }
+
+  function renderSavedRosters(selected = '') {
+    savedRosters = cache.listRosters();
+    savedSelection.replaceChildren(new Option('Choose a saved roster…', ''));
+    for (const roster of savedRosters) {
+      const labels = rosterContextLabels(roster.context);
+      const label = roster.context?.allianceName || roster.context?.allianceTag ? labels.alliance : roster.label;
+      savedSelection.add(new Option(`${roster.context?.serverId ? `Server ${labels.server} · ` : ''}${label} · ${roster.data.length} players`, roster.id));
+    }
+    savedSelection.value = selected;
+  }
+
   function renderPreview() {
-    const ordered = orderPlayers(players, order.value);
     const list = byId('import-preview-list');
     list.replaceChildren();
-    for (const player of ordered) {
+    for (const player of orderPlayers(players, order.value)) {
       const row = document.createElement('li');
       const name = document.createElement('span');
       name.textContent = player.name;
       const details = document.createElement('span');
       details.className = 'import-player-details';
-      details.textContent = [playerDetails(player),
-        player.power === undefined ? '' : `${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(player.power)} power`].filter(Boolean).join(' · ');
+      details.textContent = playerDetails(player, 'R');
       row.append(name, details);
       list.append(row);
     }
     byId('import-preview-title').textContent = `Review ${players.length} ${players.length === 1 ? 'player' : 'players'}`;
+    byId('import-list-summary').textContent = `View ${players.length} ${players.length === 1 ? 'player' : 'players'}`;
     const missing = players.filter(player => player.hqLevel === null || player.group === null).length;
-    message('import-metadata-note', missing
-      ? `${missing} ${missing === 1 ? 'player has' : 'players have'} an unknown HQ level or group. You can still import the roster; unknown values stay empty.` : '');
-    byId('import-preview').hidden = false;
-    byId('confirm-import').textContent = `Use ${players.length} ${players.length === 1 ? 'player' : 'players'}`;
-    byId('import-replace-note').textContent = hasRoster()
-      ? 'This will replace your current roster. You can edit the names and order afterward.'
-      : 'You can edit the names and order in the roster afterward.';
+    message('import-metadata-note', missing ? `${missing} ${missing === 1 ? 'player has' : 'players have'} missing HQ or rank details. You can still import them.` : '');
   }
 
-  function savedDescription(entry) {
-    const date = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.savedAt));
-    return `${entry.persisted ? 'Saved locally' : 'Kept for this visit'} · ${date}`;
-  }
-
-  function renderSavedRosters(selectedId = '') {
-    const rosters = cache.listRosters();
-    savedSelection.replaceChildren(new Option('Choose a saved roster…', ''));
-    for (const roster of rosters) {
-      const labels = rosterContextLabels(roster.context);
-      const label = roster.context?.allianceName || roster.context?.allianceTag ? labels.alliance : roster.label;
-      savedSelection.add(new Option(`${roster.context?.serverId ? `Server ${labels.server} · ` : ''}${label} · ${roster.data.length} players`, roster.id));
-    }
-    savedSelection.value = selectedId;
-    byId('saved-rosters').hidden = !rosters.length;
-    return rosters;
-  }
-
-  function showRoster(entry) {
+  function showRoster(entry, saved = false) {
     activeRoster = entry;
     players = entry.data;
-    const labels = rosterContextLabels(entry.context);
-    message('import-roster-context', `Server ${labels.server} · Alliance: ${labels.alliance}`);
-    message('roster-cache-status', `${savedDescription(entry)}. ${entry.source === 'api' ? 'Downloaded with 1 API call.' : 'Loaded without an API call.'}`);
+    fromSaved = saved;
+    step = 3;
+    credentialsStep = null;
+    keyAction = null;
     renderSavedRosters(entry.id);
+    message('roster-cache-status', savedDescription(entry));
     renderPreview();
-    setBusy(Boolean(request));
-  }
-
-  function requireKey() {
-    if (key.value.trim()) return true;
-    byId('import-lookup').open = true;
-    message('import-error', 'Enter your API key to fetch new data. Saved rosters do not need a key.');
-    key.focus();
-    key.reportValidity();
-    return false;
-  }
-
-  function showAlliances(entry) {
-    alliances = entry.data;
-    allianceServerId = Number(entry.id);
-    selection.replaceChildren(new Option('Choose an alliance…', ''));
-    for (const alliance of alliances) {
-      selection.add(new Option(`[${alliance.tag}] ${alliance.name}${Number.isInteger(alliance.memberCount) ? ` · ${alliance.memberCount} players` : ''}`, alliance.id));
-    }
-    byId('import-selection').hidden = false;
-    message('alliance-cache-status', `${savedDescription(entry)}. ${entry.source === 'api' ? 'Downloaded with 1 API call.' : 'Loaded without an API call.'}`);
-    if (!alliances.length) message('import-error', 'No ranked alliances were returned for this server. You can enter an alliance ID below.');
-    selection.focus();
   }
 
   function findAlliances(refresh = false) {
     if (request || !server.reportValidity()) return;
-    if ((refresh || !cache.getAlliances(server.value)) && !requireKey()) return;
-    // Keep the current roster available if a lookup/refresh fails.
-    run(async (options, controller) => {
+    if ((refresh || !cache.getAlliances(server.value)) && !requireKey(refresh ? 'refresh-alliances' : 'find-alliances')) return;
+    run(refresh ? 'refresh-alliances' : 'find-alliances', refresh ? 'Refreshing alliances…' : 'Finding alliances…', async (options, current) => {
       const result = await cache.loadAlliances(server.value, options, { refresh });
-      if (request !== controller || !dialog.open) return;
-      directId.value = '';
-      showAlliances(result);
-    }, refresh ? 'Refreshing alliances… This uses 1 API call.' : 'Loading alliances… Using saved data when available.');
+      if (!current()) return;
+      const previous = selection.value;
+      alliances = result.data;
+      allianceServerId = Number(result.id);
+      selection.replaceChildren(new Option('Choose an alliance…', ''));
+      for (const alliance of alliances) selection.add(new Option(`[${alliance.tag}] ${alliance.name}${Number.isInteger(alliance.memberCount) ? ` · ${alliance.memberCount} players` : ''}`, alliance.id));
+      selection.value = alliances.some(alliance => alliance.id === previous) ? previous : '';
+      clearPreview();
+      step = 2;
+      credentialsStep = null;
+      fromSaved = false;
+      message('alliance-cache-status', savedDescription(result));
+      if (!alliances.length) byId('import-direct').open = true;
+      return 'import-alliance-title';
+    });
   }
 
   function loadRoster(refresh = false) {
     if (request) return;
-    const id = (refresh ? activeRoster?.id : directId.value.trim() || selection.value)?.toLowerCase();
+    const id = refresh ? activeRoster?.id : selectedId();
     if (!id || id === 'previous-import') return;
-    if ((refresh || !cache.getRoster(id)) && !requireKey()) return;
+    if (!refresh && directId.value.trim() && !directId.reportValidity()) return;
+    if ((refresh || !cache.getRoster(id)) && !requireKey(refresh ? 'refresh-roster' : 'load-roster')) return;
     const alliance = alliances.find(item => item.id === id);
     const label = alliance ? `[${alliance.tag}] ${alliance.name}` : cache.getRoster(id)?.label ?? `Alliance ${id}`;
-    const context = alliance ? { serverId: allianceServerId, allianceId: id,
-      allianceName: alliance.name, allianceTag: alliance.tag } : cache.getRoster(id)?.context;
-    run(async (options, controller) => {
+    const context = alliance ? { serverId: allianceServerId, allianceId: id, allianceName: alliance.name, allianceTag: alliance.tag } : cache.getRoster(id)?.context;
+    const saved = refresh && fromSaved;
+    run(refresh ? 'refresh-roster' : 'load-roster', refresh ? 'Refreshing players…' : 'Loading players…', async (options, current) => {
       const result = await cache.loadRoster(id, options, { refresh, label, context });
-      if (request !== controller || !dialog.open) return;
-      showRoster(result);
-      byId('import-preview-title').focus();
-    }, refresh ? 'Refreshing players… This uses 1 API call.' : 'Loading players… Using saved data when available.');
+      if (!current()) return;
+      showRoster(result, saved);
+      return 'import-preview-title';
+    });
   }
 
-  byId('open-import').addEventListener('click', () => {
+  function back() {
+    goTo(step === 3 ? fromSaved ? 'saved' : 2 : step === 2 ? 1 : 'saved');
+  }
+
+  function open() {
+    if (dialog.open) return;
+    cancelRequest();
+    dialog.returnValue = '';
     form.reset();
     clearAlliances();
-    message('import-error');
-    message('import-status');
+    fromSaved = false;
     byId('import-direct').open = false;
-    const saved = renderSavedRosters();
-    byId('import-lookup').open = saved.length === 0;
-    if (saved.length) showRoster(saved[0]);
-    setBusy(false);
+    byId('import-player-details').open = false;
+    renderSavedRosters();
+    goTo(savedRosters.length ? 'saved' : 1, false);
     dialog.showModal();
-    if (saved.length) savedSelection.focus();
-  });
+    (savedRosters.length ? savedSelection : server).focus();
+  }
+  byId('open-import').addEventListener('click', open);
   byId('cancel-import').addEventListener('click', () => dialog.close());
+  byId('import-back').addEventListener('click', back);
+  byId('find-another-alliance').addEventListener('click', () => goTo(1));
+  byId('change-import-server').addEventListener('click', () => goTo(1));
+  byId('change-import-alliance').addEventListener('click', back);
   dialog.addEventListener('close', () => {
     cancelRequest();
     key.value = '';
@@ -205,62 +276,56 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
   });
   dialog.addEventListener('cancel', cancelRequest);
 
-  key.addEventListener('input', () => {
-    cancelRequest();
-    message('import-error');
-  });
+  key.addEventListener('input', () => { message('import-error'); });
   server.addEventListener('input', () => {
     cancelRequest();
     clearAlliances();
     directId.value = '';
+    byId('import-direct').open = false;
     savedSelection.value = '';
     message('import-error');
-    setBusy(false);
+    render();
   });
   savedSelection.addEventListener('change', () => {
+    const entry = cache.getRoster(savedSelection.value);
+    if (!entry) return;
     cancelRequest();
     message('import-error');
-    const entry = cache.getRoster(savedSelection.value);
-    if (entry) showRoster(entry);
-    else clearPreview();
+    showRoster(entry, true);
+    render();
+    byId(stepTitle()).focus();
   });
   selection.addEventListener('change', () => {
-    cancelRequest();
     directId.value = '';
     clearPreview();
-    savedSelection.value = '';
     message('import-error');
-    setBusy(false);
+    credentialsStep = null;
+    render();
   });
   directId.addEventListener('input', () => {
-    cancelRequest();
     selection.value = '';
     clearPreview();
-    savedSelection.value = '';
     message('import-error');
-    setBusy(false);
+    render();
   });
-  order.addEventListener('change', () => { if (players.length) renderPreview(); });
-
-  // Enter in the first fields searches the server instead of prematurely importing.
-  form.addEventListener('submit', event => {
-    event.preventDefault();
-    findAlliances();
-  });
-
-  byId('load-roster').addEventListener('click', () => loadRoster());
+  order.addEventListener('change', renderPreview);
   byId('refresh-roster').addEventListener('click', () => loadRoster(true));
   byId('refresh-alliances').addEventListener('click', () => findAlliances(true));
-
-  byId('confirm-import').addEventListener('click', () => {
-    if (!players.length || request) return;
-    onImport(orderPlayers(players, order.value), activeRoster?.context ?? null);
-    dialog.close();
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    if (request) return;
+    if (document.activeElement === key && keyAction === 'refresh-roster') { loadRoster(true); return; }
+    if (document.activeElement === key && keyAction === 'refresh-alliances') { findAlliances(true); return; }
+    if (step === 1) findAlliances();
+    else if (step === 2) loadRoster();
+    else if (step === 3 && players.length) {
+      if (onImport(orderPlayers(players, order.value), activeRoster?.context ?? null) !== false) dialog.close('imported');
+    }
   });
 
-  // Restore provenance for an older workspace only when its imported IDs match one saved roster.
   const previousIds = new Set(previousPlayers?.map(player => player.id));
   const matches = cache.listRosters().filter(roster => roster.data.length === previousIds.size &&
     roster.data.every(player => previousIds.has(player.id)));
-  return { previousContext: previousContext ?? (matches.length === 1 ? matches[0].context : null) };
+  return { open, hasSavedRosters: () => cache.listRosters().length > 0,
+    previousContext: previousContext ?? (matches.length === 1 ? matches[0].context : null) };
 }

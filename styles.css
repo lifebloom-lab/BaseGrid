@@ -544,6 +544,55 @@ input:focus,textarea:focus {
   line-height:1.7;
 }
 
+.workspace.is-welcoming {
+  grid-template-columns:minmax(0,1fr);
+  max-width:900px;
+  margin-inline:auto;
+}
+
+.is-welcoming .formation-heading,
+.is-welcoming .placement-overview,
+.is-welcoming .legend,
+.is-welcoming .map-footer {
+  display:none;
+}
+
+.is-welcoming .map-empty {
+  padding:36px;
+  border:0;
+  background:transparent;
+  text-align:left;
+}
+
+.welcome-panel { width:100%; }
+.welcome-panel h2 { font-size:1.6rem; margin-bottom:12px; }
+.welcome-panel .eyebrow { font-size:.75rem; }
+.welcome-intro { max-width:620px; }
+.welcome-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; margin-top:28px; }
+.welcome-option { display:flex; flex-direction:column; align-items:flex-start; padding:24px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
+.welcome-icon { color:var(--mint); margin-bottom:18px; }
+.welcome-option h3 { margin-bottom:10px; }
+.welcome-option .button { width:100%; margin-top:auto; }
+.welcome-option>p:last-of-type:not(.welcome-saved-rosters),
+.welcome-option .welcome-key-help { margin-bottom:22px; }
+.welcome-option .welcome-key-help { font-size:.8125rem; margin-top:12px; }
+.welcome-key-help a { display:inline-block; color:var(--mint); text-underline-offset:3px; }
+.welcome-option .welcome-saved-rosters { font-size:.8125rem; margin-bottom:22px; color:var(--mint); }
+.welcome-panel .welcome-device-note { margin-top:24px; font-size:.8125rem; text-align:center; }
+#manual-empty .empty-grid { display:block; }
+#manual-empty .text-button { margin-top:20px; }
+.formation-next-step { margin:0 25px 20px; padding:16px 18px; border:1px solid #45675c; border-radius:8px; background:#9ae7c108; color:var(--muted); font-size:.875rem; line-height:1.6; }
+.formation-next-step strong { display:block; color:var(--mint); margin-bottom:4px; font-weight:600; }
+
+@media(max-width:600px) {
+  .is-welcoming .map-empty { padding:24px 20px; }
+  .welcome-panel h2 { font-size:1.35rem; }
+  .welcome-options { grid-template-columns:1fr; gap:16px; margin-top:22px; }
+  .welcome-option { padding:20px; }
+  .welcome-icon { margin-bottom:14px; }
+  .formation-next-step { margin-inline:21px; }
+}
+
 .map-scroll {
   overflow:auto;
   max-height:650px;
@@ -1330,7 +1379,7 @@ dialog::backdrop {
   background:#050d11c9;
 }
 
-dialog:not(.formation-fullscreen):not(.placement-popup) p {
+dialog:not(.formation-fullscreen):not(.placement-popup):not(.import-dialog) p {
   line-height:1.7;
   color:var(--muted);
   font-size:.9375rem;
@@ -1530,23 +1579,26 @@ dialog form {
   overflow-y: auto;
 }
 
-.import-dialog h2 {
-  font-size: 1.5rem;
-}
-
-.import-dialog form {
-  display: block;
-}
-
-.import-dialog .eyebrow {
-  margin: 0 0 9px;
-  font-size: .75rem;
-}
-
-.import-dialog .field-help {
-  margin: 8px 0 0;
-  font-size: .8125rem;
-}
+.import-dialog h2 { font-size:1.5rem; }
+.import-dialog h3 { margin:0 0 18px; font-size:1.0625rem; }
+.import-dialog p { margin:12px 0 20px; line-height:1.55; color:var(--muted); font-size:.875rem; }
+.import-dialog form { display:block; }
+.import-dialog .field-help { margin:8px 0 0; font-size:.8125rem; }
+.import-steps { display:flex; gap:12px; list-style:none; margin:0 0 24px; padding:0; }
+.import-steps li { display:flex; flex:1; align-items:center; gap:8px; padding:0 0 12px; border-bottom:2px solid var(--line); color:var(--muted); font-size:.8125rem; }
+.import-steps li span { display:grid; place-items:center; width:24px; height:24px; border:1px solid var(--line); border-radius:50%; font-size:.75rem; }
+.import-steps li[aria-current="step"] { border-color:var(--mint); color:var(--text); font-weight:600; }
+.import-steps li[aria-current="step"] span { color:var(--bg); border-color:var(--mint); background:var(--mint); }
+.import-steps li.import-step-complete { border-color:#527c67; }
+.import-steps li.import-step-complete span { color:var(--mint); border-color:#527c67; }
+.import-context { margin:0 0 22px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.import-context > div { display:flex; justify-content:space-between; align-items:baseline; gap:12px; font-size:.875rem; }
+.import-context > div + div { margin-top:8px; }
+.import-context span { min-width:0; overflow-wrap:anywhere; }
+.import-context .text-button { flex-shrink:0; padding:2px 0; font-size:.8125rem; }
+#import-key-field { margin-top:18px; }
+#import-action-help { margin-top:20px; }
+#import-preview .import-direct { margin-bottom:0; }
 
 .import-field {
   margin-bottom: 19px;
@@ -1569,18 +1621,6 @@ dialog form {
   border-radius: 8px;
 }
 
-.import-search {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 12px;
-  margin-bottom: 19px;
-}
-
-.import-search .import-field {
-  margin: 0;
-}
-
 .import-direct {
   margin: 4px 0 20px;
 }
@@ -1596,38 +1636,15 @@ dialog form {
   margin: 12px 0 0;
 }
 
-.import-dialog #load-roster,
-.import-dialog #confirm-import {
-  width: 100%;
-}
-
-.import-dialog .import-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: .875rem;
-  color: var(--mint);
-  margin: 16px 0;
-}
-
-#import-form[aria-busy="true"] .import-status::before {
-  content: '';
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
-  border: 2px solid #95e5bf40;
-  border-top-color: currentColor;
-  border-radius: 50%;
-  animation: import-spin .8s linear infinite;
-}
+.import-dialog .is-loading { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+.import-dialog .is-loading::before { content:''; flex:0 0 14px; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:import-spin .8s linear infinite; }
 
 @keyframes import-spin {
   to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #import-form[aria-busy="true"] .import-status::before { animation: none; }
+  .import-dialog .is-loading::before { animation: none; }
 }
 
 .import-dialog .error {
@@ -1635,29 +1652,7 @@ dialog form {
   color: #f8c6c0;
 }
 
-.import-preview {
-  border-top: 1px solid var(--line);
-  margin-top: 23px;
-  padding-top: 21px;
-}
-
-.import-preview h3 {
-  margin-bottom: 10px;
-  font-size: 1.125rem;
-}
-
-#refresh-roster {
-  margin: 5px 0 12px;
-  padding-left: 0;
-}
-
-#import-lookup > summary {
-  color: var(--text);
-}
-
-#import-lookup > .import-field {
-  margin-bottom: 19px;
-}
+#refresh-roster, #refresh-alliances { padding:8px 0; font-size:.8125rem; }
 
 .import-dialog #import-cache-warning {
   font-size: .8125rem;
@@ -1734,32 +1729,20 @@ dialog form {
   margin: 14px 0;
 }
 
-.import-dialog-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 23px;
-  padding-top: 18px;
-  border-top: 1px solid var(--line);
-}
+.import-dialog-footer { display:flex; justify-content:space-between; gap:12px; margin-top:18px; padding-top:18px; border-top:1px solid var(--line); }
+.import-next-actions { display:flex; justify-content:flex-end; gap:10px; margin-left:auto; }
+.import-dialog-footer .button { min-height:44px; padding:10px 14px; font-size:.875rem; }
 
-.import-dialog-footer > span {
-  font-size: .75rem;
-  line-height: 1.6;
-  color: var(--muted);
-}
-
-@media (max-width: 420px) {
-  .import-dialog {
-    padding: 21px;
-  }
-  .import-search {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .import-dialog-footer {
-    align-items: flex-start;
-  }
+@media (max-width:420px) {
+  .import-dialog { padding:21px; }
+  .import-steps { gap:8px; }
+  .import-steps li { gap:6px; }
+  .import-context > div { align-items:flex-start; }
+  .import-dialog-footer { flex-wrap:wrap; }
+  .import-next-actions { flex-wrap:wrap; }
+  .import-dialog-footer:has(#import-back:not([hidden])) .import-next-actions { display:contents; }
+  .import-dialog-footer:has(#import-back:not([hidden])) .primary { flex-basis:100%; }
+  .import-dialog-footer:has(#import-back:not([hidden])) #cancel-import { margin-left:auto; }
 }
 
 /* A modal fills the available window, including browsers without native fullscreen. */

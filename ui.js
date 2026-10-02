@@ -16,6 +16,7 @@ let currentPlan = null;
 let mapPadding = 1;
 let resetKind = 'clear';
 let poolPlayerId = null;
+let imported = null;
 const autoPlaceDialog = byId('auto-place-dialog');
 const fullscreenDialog = byId('formation-fullscreen');
 const fullscreenToggle = byId('formation-fullscreen-toggle');
@@ -417,6 +418,20 @@ function render() {
   byId('roster-server').textContent = context.server;
   byId('roster-alliance').textContent = context.alliance;
   const count = parseManualPlayers(draft.names).length;
+  const welcoming = !count && draft.setupMethod !== 'manual';
+  byId('workspace').classList.toggle('is-welcoming', welcoming);
+  byId('planner-controls').hidden = welcoming;
+  byId('formation-panel').setAttribute('aria-labelledby', welcoming ? 'welcome-title' : 'formation-title');
+  byId('welcome-panel').hidden = !welcoming;
+  byId('welcome-saved-rosters').hidden = !imported?.hasSavedRosters();
+  byId('manual-empty').hidden = welcoming;
+  byId('choose-setup-method').hidden = count > 0;
+  byId('manual-empty-title').textContent = count ? 'Check your starting point' : 'Start with your players';
+  byId('manual-empty-help').textContent = count
+    ? 'Enter valid starting coordinates and spacing to show your formation.'
+    : 'Enter one player name per line in the Player names field.';
+  byId('formation-next-step').hidden = !plan || plan.pool.length !== plan.players.length;
+  fullscreenToggle.disabled = !count;
   byId('player-count').textContent = `${count} ${count === 1 ? 'player' : 'players'}`;
   const spacing = Number(draft.spacing);
   byId('spacing-help').textContent = draft.spacing.trim() && Number.isSafeInteger(spacing) && spacing >= 0
@@ -428,11 +443,20 @@ function render() {
 }
 
 byId('setup-form').addEventListener('submit', event => event.preventDefault());
-byId('setup-form').addEventListener('input', () => {
+byId('setup-form').addEventListener('input', event => {
   const patch = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value]));
+  if (event.target === fields.names) patch.setupMethod = 'manual';
   if (!change(value => updateTileDraft(value, patch))) syncFields();
 });
 function syncFields() { for (const [key, input] of Object.entries(fields)) input.value = draft[key]; }
+
+byId('welcome-manual').addEventListener('click', () => {
+  if (change(value => ({ ...value, setupMethod: 'manual' }))) fields.names.focus();
+});
+byId('welcome-import').addEventListener('click', () => imported.open());
+byId('choose-setup-method').addEventListener('click', () => {
+  if (change(value => ({ ...value, setupMethod: null }))) byId('welcome-title').focus();
+});
 
 byId('close-placement').addEventListener('click', closePlacement);
 byId('confirm-placement').addEventListener('click', () => change(value => confirmTilePlacement(value, value.selectedPlayerId), 'undo-confirmation'));
@@ -444,7 +468,7 @@ function requestReset(kind) {
   byId('reset-title').textContent = kind === 'progress' ? 'Reset placement progress?' : 'Clear this formation?';
   byId('reset-description').textContent = kind === 'progress'
     ? 'All players return to Planned and their bases unlock. Your roster, positions, and obstacles stay in place.'
-    : 'This removes the current roster, positions, obstacles, and placement progress. Your saved API rosters remain available to import again.';
+    : 'This removes the current roster, positions, obstacles, and placement progress. Saved imported rosters stay available. You’ll return to Get started.';
   byId('reset-dialog').querySelector('.reset-confirm').textContent = kind === 'progress' ? 'Reset progress' : 'Clear formation';
   byId('reset-dialog').returnValue = 'cancel';
   byId('reset-dialog').showModal();
@@ -463,7 +487,8 @@ byId('reset-dialog').addEventListener('close', () => {
     render();
   }
   syncFields();
-  fields.names.focus({ preventScroll: true });
+  if (resetKind === 'clear') byId('welcome-title').focus();
+  else fields.names.focus({ preventScroll: true });
 });
 
 function editFormation(kind, from, to, size) { return change(value => moveTile(value, kind, from, to, size)); }
@@ -486,19 +511,27 @@ try {
   showMessage('notice', 'The saved plan could not be opened. Start a new plan, or clear the saved formation.');
 }
 syncFields();
-const imported = setupRosterImport({ hasRoster: () => parseManualPlayers(draft.names).length > 0,
+imported = setupRosterImport({ hasRoster: () => parseManualPlayers(draft.names).length > 0,
   previousPlayers: draft.importedPlayers, previousContext: draft.rosterContext,
   onImport(players, rosterContext) {
     if (draft.tilePlacements?.some(record => record.status === 'placed')) {
       showMessage('error', 'Undo confirmations before replacing the roster.');
-      return;
+      return false;
     }
     if (change(value => updateTileDraft(value, { names: players.map(player => player.name).join('\n'),
-      importedPlayers: players, orderedPlayers: players, rosterContext }))) {
+      importedPlayers: players, orderedPlayers: players, rosterContext, setupMethod: 'import' }))) {
       syncFields();
-      showMessage('notice', `${players.length} players imported. Add bases from the pool or use Auto place, then choose Place on any player.`);
+      showMessage('notice', `${players.length} players imported.`);
+      return true;
     }
+    return false;
   },
+});
+byId('import-dialog').addEventListener('close', () => {
+  render();
+  if (byId('import-dialog').returnValue === 'imported') {
+    (byId('formation-next-step').hidden ? byId('setup-title') : byId('formation-next-step')).focus();
+  }
 });
 if (!draft.rosterContext && imported.previousContext) { draft = { ...draft, rosterContext: imported.previousContext }; persist(); }
 render();
