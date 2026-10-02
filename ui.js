@@ -5,7 +5,7 @@ import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './s
 import { getTilePlan, openTilePlacement, confirmTilePlacement, undoTileConfirmation, cancelTilePlacement,
   recordCopiedMessage, moveTile, updateTileDraft, resetTileProgress, migrateTileWorkspace, returnBaseToPool, autoPlaceBases } from './tile-placement.js';
 import { setupRosterImport } from './import-ui.js';
-import { setupFormationReorder } from './reorder-ui.js';
+import { setupFormationReorder } from './reorder-ui.js?v=20261002-map';
 import { setupPlacementMessages } from './placement-messages.js';
 
 const byId = id => document.getElementById(id);
@@ -25,6 +25,119 @@ let pagePosition = null;
 const placementPopup = byId('placement-popup');
 const placementHomes = new Map();
 let placementReturn = null;
+const compactMedia = window.matchMedia('(max-width:760px), (max-width:1100px) and (max-height:600px)');
+const mapToolsDialog = byId('map-tools-dialog');
+let mapToolsReturn = null;
+let mapToolsPosition = null;
+let activeMapSheet = null;
+const isCompactMap = () => fullscreenDialog.open && compactMedia.matches;
+
+function mapPosition() {
+  const map = byId('map-scroll');
+  return { left: map.scrollLeft, top: map.scrollTop };
+}
+
+function closeMapTools(restoreFocus = true) {
+  if (mapToolsDialog.open) mapToolsDialog.close();
+  if (mapToolsPosition) byId('map-scroll').scrollTo(mapToolsPosition);
+  if (restoreFocus && mapToolsReturn) {
+    (isCompactMap() ? mapToolsReturn : fullscreenToggle).focus({ preventScroll: true });
+  }
+  mapToolsReturn = null;
+  mapToolsPosition = null;
+  activeMapSheet = null;
+}
+
+function renderMobilePool() {
+  const query = byId('mobile-pool-search').value.trim().toLocaleLowerCase();
+  const pool = currentPlan?.pool ?? [];
+  const players = sortPoolPlayers(pool).filter(player => player.name.toLocaleLowerCase().includes(query));
+  byId('mobile-pool-summary').textContent = `${pool.length} ${pool.length === 1 ? 'base' : 'bases'} in the pool`;
+  byId('mobile-auto-place').disabled = !currentPlan || byId('auto-place').disabled;
+  const list = byId('mobile-pool-list');
+  list.replaceChildren();
+  for (const player of players) {
+    const row = element('li');
+    const button = element('button', 'mobile-pool-player');
+    button.type = 'button';
+    button.setAttribute('aria-label', `Add ${player.name}${playerDetails(player, 'R') ? ` · ${playerDetails(player, 'R')}` : ''}`);
+    button.append(element('span', 'mobile-player-name', player.name), renderPlayerDetails(player));
+    button.addEventListener('click', () => {
+      poolPlayerId = player.id;
+      byId('pool-player').value = player.id;
+      syncPoolTool();
+      closeMapTools(false);
+      reorder.begin(byId('add-base'));
+    });
+    row.append(button);
+    list.append(row);
+  }
+  byId('mobile-pool-empty').hidden = Boolean(players.length);
+  byId('mobile-pool-empty').textContent = pool.length ? 'No players match your search.' : 'All bases are on the map. Use ↶ on a base to return it to the pool.';
+}
+
+function openMapTools(sheet, source) {
+  if (!isCompactMap()) return;
+  reorder?.cancel();
+  activeMapSheet = sheet;
+  mapToolsPosition = mapPosition();
+  mapToolsReturn = source;
+  byId('map-tools-title').textContent = { bases: 'Bases', obstacles: 'Obstacles', more: 'Map tools' }[sheet];
+  for (const name of ['bases', 'obstacles', 'more']) byId(`mobile-${name}-sheet`).hidden = sheet !== name;
+  byId('mobile-pool-search').value = '';
+  renderMobilePool();
+  byId('mobile-placement-summary').textContent = byId('placement-count').textContent;
+  byId('mobile-origin-summary').textContent = currentPlan
+    ? `Starting point: X ${currentPlan.origin.x}, Y ${currentPlan.origin.y} · Spacing ${currentPlan.spacing}` : '';
+  mapToolsDialog.showModal();
+  // Avoid opening the phone keyboard until the player chooses to search.
+  byId('close-map-tools').focus({ preventScroll: true });
+}
+
+function syncCompactFullscreen() {
+  const compact = isCompactMap();
+  const wasCompact = fullscreenDialog.classList.contains('compact-map');
+  if (!compact) { closeMapTools(false); reorder?.cancel(); }
+  fullscreenDialog.classList.toggle('compact-map', compact);
+  if (!compact && wasCompact && fullscreenDialog.open) fullscreenToggle.focus({ preventScroll: true });
+}
+
+compactMedia.addEventListener('change', syncCompactFullscreen);
+byId('mobile-map-exit').addEventListener('click', () => exitFormationFullscreen());
+for (const button of document.querySelectorAll('[data-map-sheet]')) {
+  button.addEventListener('click', () => openMapTools(button.dataset.mapSheet, button));
+}
+byId('close-map-tools').addEventListener('click', () => closeMapTools());
+mapToolsDialog.addEventListener('cancel', event => { event.preventDefault(); closeMapTools(); });
+mapToolsDialog.addEventListener('close', () => { if (!mapToolsDialog.open) closeMapTools(); });
+mapToolsDialog.addEventListener('click', event => {
+  const rect = mapToolsDialog.getBoundingClientRect();
+  if (event.target === mapToolsDialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) closeMapTools();
+});
+byId('mobile-pool-search').addEventListener('input', renderMobilePool);
+byId('mobile-auto-place').addEventListener('click', () => { closeMapTools(false); byId('auto-place').click(); });
+autoPlaceDialog.addEventListener('close', () => {
+  if (isCompactMap()) byId('mobile-map-bases').focus({ preventScroll: true });
+});
+for (const button of document.querySelectorAll('[data-mobile-obstacle]')) {
+  button.addEventListener('click', () => {
+    closeMapTools(false);
+    reorder.begin(byId(button.dataset.mobileObstacle === '1' ? 'add-obstacle' : 'add-large-obstacle'), { repeat: true });
+  });
+}
+byId('mobile-expand-map').addEventListener('click', () => {
+  closeMapTools(false);
+  byId('expand-map').click();
+  byId('map-scroll').focus({ preventScroll: true });
+});
+byId('mobile-map-cancel').addEventListener('click', () => {
+  reorder?.cancel();
+  byId('map-scroll').focus({ preventScroll: true });
+});
+byId('formation-grid').addEventListener('click', event => {
+  if (!isCompactMap() || event.target.closest('button')) return;
+  event.target.closest('[data-player-id]')?.querySelector('.tile-action')?.click();
+});
 
 function showPlacementPopup(playerId, mapPosition) {
   reorder?.cancel();
@@ -96,17 +209,20 @@ function expandFormation() {
   document.body.classList.add('formation-expanded');
   updateFullscreenButton(true);
   fullscreenDialog.showModal();
+  syncCompactFullscreen();
   map.scrollTo(scrollLeft, scrollTop);
-  fullscreenToggle.focus({ preventScroll: true });
+  (isCompactMap() ? byId('mobile-map-exit') : fullscreenToggle).focus({ preventScroll: true });
 }
 
 function exitFormationFullscreen(restoreFocus = true) {
   if (!fullscreenHomes.size) return;
+  closeMapTools(false);
   hidePlacementPopup(false);
   reorder?.cancel();
   const map = byId('map-scroll');
   const { scrollLeft, scrollTop } = map;
   if (fullscreenDialog.open) fullscreenDialog.close();
+  fullscreenDialog.classList.remove('compact-map');
   for (const [node, home] of fullscreenHomes) home.replaceWith(node);
   fullscreenHomes.clear();
   document.body.classList.remove('formation-expanded');
@@ -241,7 +357,7 @@ function renderFormation(plan) {
         remove.setAttribute('aria-label', remove.title);
         remove.addEventListener('click', () => {
           poolPlayerId = slot.playerId;
-          if (change(value => returnBaseToPool(value, slot.playerId), 'add-base')) {
+          if (change(value => returnBaseToPool(value, slot.playerId), isCompactMap() ? 'mobile-map-bases' : 'add-base')) {
             byId('reorder-status').textContent = `${slot.name} returned to the pool. Their roster details are saved.`;
           }
         });
@@ -275,7 +391,7 @@ function renderFormation(plan) {
       remove.setAttribute('aria-label', `Remove obstacle at X ${coordinates.x}, Y ${coordinates.y}`);
       remove.addEventListener('click', () => {
         if (editFormation('obstacle', slot, null)) {
-          byId('add-obstacle').focus({ preventScroll: true });
+          byId(isCompactMap() ? 'mobile-map-obstacles' : 'add-obstacle').focus({ preventScroll: true });
           byId('reorder-status').textContent = `Obstacle removed at ${coordinates.x}, ${coordinates.y}.`;
         }
       });
@@ -438,6 +554,11 @@ function render() {
     ? `${spacing} empty ${spacing === 1 ? 'tile' : 'tiles'} between bases when using Auto place. Dragging moves 1 tile at a time.`
     : 'Spacing is the number of empty tiles between bases.';
   renderFormation(plan);
+  byId('mobile-map-progress').textContent = `${placed}/${total} placed`;
+  byId('mobile-map-progress').setAttribute('aria-label', `${placed} of ${total} placed. View progress and map tools`);
+  byId('mobile-pool-count').textContent = `· ${plan?.pool.length ?? 0}`;
+  for (const id of ['mobile-map-bases', 'mobile-map-obstacles', 'mobile-expand-map']) byId(id).disabled = !plan;
+  if (mapToolsDialog.open && activeMapSheet === 'bases') renderMobilePool();
   renderResults(plan);
   if (!selected) hidePlacementPopup();
 }
@@ -500,7 +621,18 @@ byId('expand-map').addEventListener('click', () => {
 reorder = setupFormationReorder({ grid: byId('formation-grid'), map: byId('map-scroll'),
   obstacleTools: [...document.querySelectorAll('.obstacle-tool')],
   validate: (kind, from, to, size) => previewGridMove(currentPlan, kind, from, to, size),
-  announce: message => { byId('reorder-status').textContent = message; }, onDrop: editFormation });
+  compact: isCompactMap,
+  onMoveChange: move => {
+    byId('mobile-map-action').hidden = !isCompactMap() || !move;
+    if (!move) return;
+    byId('mobile-map-instruction').textContent = move.mode === 'pointer' ? `Moving ${move.name}`
+      : move.kind === 'new-player' ? `Tap to place ${move.name}` : `Tap the map to place ${move.name}`;
+    byId('mobile-map-cancel').textContent = move.repeat ? 'Done' : 'Cancel';
+  },
+  announce: message => {
+    byId('reorder-status').textContent = message;
+    if (!byId('mobile-map-action').hidden) byId('mobile-map-instruction').textContent = message;
+  }, onDrop: editFormation });
 
 try {
   const saved = loadWorkspace(window.localStorage);

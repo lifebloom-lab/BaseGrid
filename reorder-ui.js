@@ -1,10 +1,13 @@
 import { gridCoordinates } from './grid-layout.js';
 
 /** Mouse, touch and keyboard share the same one-cell snapping and footprint preview. */
-export function setupFormationReorder({ grid, map, obstacleTools, validate, onDrop, announce }) {
+export function setupFormationReorder({ grid, map, obstacleTools, validate, onDrop, announce,
+  compact = () => false, onMoveChange = () => {} }) {
   const root = grid.closest('.formation-panel');
   let move = null;
   let animation = null;
+  let mapTap = null;
+  let suppressDropClick = false;
   const cells = () => [...grid.querySelectorAll('.slot')];
   const position = cell => ({ column: Number(cell.dataset.column), row: Number(cell.dataset.row) });
   const same = (a, b) => a && b && a.column === b.column && a.row === b.row;
@@ -43,7 +46,7 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     move.preview.append(label);
   }
 
-  function start(cell, mode) {
+  function start(cell, mode, { repeat = false } = {}) {
     const palette = cell.matches('.obstacle-tool, .base-tool');
     const base = cell.matches('.base-tool');
     const from = base ? { playerId: cell.dataset.playerId } : palette ? null : position(cell);
@@ -52,7 +55,7 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     preview.className = 'drop-preview';
     preview.setAttribute('aria-hidden', 'true');
     grid.append(preview);
-    move = { mode, from, palette, kind: base ? 'new-player' : palette ? 'new-obstacle' : cell.dataset.kind, size, cell, preview,
+    move = { mode, from, palette, repeat, kind: base ? 'new-player' : palette ? 'new-obstacle' : cell.dataset.kind, size, cell, preview,
       name: base ? cell.dataset.name : palette || cell.dataset.kind === 'obstacle' ? `Obstacle ${size} × ${size}` : cell.querySelector('.slot-name').textContent };
     cell.classList.add('is-drag-source');
     handle(cell).setAttribute('aria-pressed', 'true');
@@ -60,10 +63,13 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     const area = bounds();
     markTarget(palette ? { column: 0, row: 0 } : from ?? { column: area.column, row: area.row });
     if (mode === 'pointer') preview.hidden = true;
-    else announce(`${move.name}. Move one tile with the arrow keys, then Space to drop. Escape cancels.`);
+    else announce(compact() && mode === 'choose' ? `Tap the map to place ${move.name}. ${repeat ? 'Done finishes.' : 'Cancel stops placement.'}`
+      : `${move.name}. Move one tile with the arrow keys, then Space to drop. Escape cancels.`);
+    onMoveChange({ name: move.name, kind: move.kind, mode, repeat });
   }
 
   function cancel(message = '') {
+    mapTap = null;
     if (!move) return;
     const { cell, preview, pointerId } = move;
     move = null;
@@ -73,11 +79,12 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     if (pointerId !== undefined && root.hasPointerCapture(pointerId)) root.releasePointerCapture(pointerId);
     cancelAnimationFrame(animation);
     animation = null;
+    onMoveChange(null);
     if (message) announce(message);
   }
 
   function finish() {
-    const { from, destination: to, name, kind, size, valid, error, mode, cell, swap } = move;
+    const { from, destination: to, name, kind, size, valid, error, mode, cell, swap, repeat } = move;
     if (!valid && mode !== 'pointer') { announce(error); return; }
     cancel();
     let success = false;
@@ -88,8 +95,15 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
       announce(success ? swap ? `${name} and ${swap.name} swapped positions. Plan saved.`
         : `${name} moved to ${description(to, size)}. Plan saved.` : 'That move could not be saved. Plan unchanged.');
     }
-    const target = cellAt(success ? to : from);
-    (target ? handle(target) : cell.isConnected ? handle(cell) : obstacleTools[0])?.focus({ preventScroll: true });
+    if (success && repeat && cell.isConnected && !cell.disabled) {
+      start(cell, 'choose', { repeat: true });
+      move.preview.hidden = true;
+      map.focus({ preventScroll: true });
+    } else if (compact()) map.focus({ preventScroll: true });
+    else {
+      const target = cellAt(success ? to : from);
+      (target ? handle(target) : cell.isConnected ? handle(cell) : obstacleTools[0])?.focus({ preventScroll: true });
+    }
   }
 
   function targetAtPointer(x, y) {
@@ -129,16 +143,16 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
 
   root.addEventListener('pointerdown', event => {
     if (event.button !== 0 || !event.isPrimary) return;
+    suppressDropClick = false;
     if (move && move.mode !== 'pointer' && grid.contains(event.target)) {
-      event.preventDefault();
-      markTarget(targetAtPointer(event.clientX, event.clientY));
-      finish();
+      // Commit on release, so a swipe can still pan while a placement tool is active.
+      mapTap = { id: event.pointerId, x: event.clientX, y: event.clientY };
       return;
     }
     if (event.target.closest('.obstacle-remove, .tile-action, .base-return')) return;
     const cell = event.target.closest('.slot-reorderable, .obstacle-tool, .base-tool');
     if (!cell || cell.disabled) return;
-    if (event.pointerType === 'touch' && !cell.matches('.obstacle-tool, .base-tool') && !event.target.closest('.slot-move')) return;
+    if ((event.pointerType === 'touch' || compact()) && !cell.matches('.obstacle-tool, .base-tool') && !event.target.closest('.slot-move')) return;
     cancel();
     if (event.pointerType === 'mouse') event.preventDefault();
     start(cell, 'pointer');
@@ -152,6 +166,7 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
   root.addEventListener('pointermove', event => {
     if (!move) return;
     if (move.mode !== 'pointer') {
+      if (mapTap && Math.hypot(event.clientX - mapTap.x, event.clientY - mapTap.y) >= 8) mapTap = null;
       if (grid.contains(event.target)) markTarget(targetAtPointer(event.clientX, event.clientY));
       return;
     }
@@ -164,8 +179,16 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     }
   });
   root.addEventListener('pointerup', event => {
+    if (move && move.mode !== 'pointer' && mapTap?.id === event.pointerId) {
+      mapTap = null;
+      suppressDropClick = true;
+      markTarget(targetAtPointer(event.clientX, event.clientY));
+      finish();
+      return;
+    }
     if (!move || move.mode !== 'pointer' || event.pointerId !== move.pointerId) return;
     if (move.active) {
+      suppressDropClick = true;
       markTarget(targetAtPointer(event.clientX, event.clientY));
       finish();
     } else {
@@ -176,15 +199,18 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
   });
   // A touch/mouse click completing a drop must not also activate a button under it.
   root.addEventListener('click', event => {
-    if (move && grid.contains(event.target)) { event.preventDefault(); event.stopPropagation(); }
+    if ((move || suppressDropClick) && grid.contains(event.target)) {
+      event.preventDefault(); event.stopPropagation(); suppressDropClick = false;
+    }
   }, true);
   for (const type of ['pointercancel', 'lostpointercapture']) {
-    root.addEventListener(type, () => { if (move?.mode === 'pointer') cancel('Move cancelled. Plan unchanged.'); });
+    root.addEventListener(type, () => { mapTap = null; if (move?.mode === 'pointer') cancel('Move cancelled. Plan unchanged.'); });
   }
   root.addEventListener('keydown', event => {
     const target = event.target.closest('.slot-move, .obstacle-tool, .base-tool');
-    if (!target || target.disabled) return;
-    const cell = target.matches('.obstacle-tool, .base-tool') ? target : target.closest('.slot-reorderable');
+    const fromMap = event.target === map && move && move.mode !== 'pointer';
+    if (!fromMap && (!target || target.disabled)) return;
+    const cell = fromMap ? move.cell : target.matches('.obstacle-tool, .base-tool') ? target : target.closest('.slot-reorderable');
     if (event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
       if (move && move.mode !== 'pointer') finish();
@@ -216,8 +242,14 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
     event.preventDefault();
     const source = handle(move.cell);
     cancel('Move cancelled. Plan unchanged.');
-    source?.focus({ preventScroll: true });
+    (compact() ? map : source)?.focus({ preventScroll: true });
   });
   window.addEventListener('blur', () => cancel('Move cancelled. Plan unchanged.'));
-  return { cancel };
+  return { cancel, begin(cell, options) {
+    if (!cell || cell.disabled) return;
+    cancel();
+    start(cell, 'choose', options);
+    move.preview.hidden = true;
+    map.focus({ preventScroll: true });
+  } };
 }
