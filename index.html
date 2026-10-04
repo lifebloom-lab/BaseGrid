@@ -7,8 +7,8 @@
   <meta name="description" content="Plan aligned Last War alliance bases, work around obstacles, and keep every player's coordinates in one place.">
   <title>BaseGrid · Alliance planner</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310191c'/%3E%3Cpath fill='%2395e5bf' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6z'/%3E%3Cpath fill='%23d6a970' d='M18 18h8v8h-8z'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./styles.css?v=20261002-map">
-  <script type="module" src="./ui.js?v=20261002-map"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261004-zoom">
+  <script type="module" src="./ui.js?v=20261004-zoom"></script>
 </head>
 <body>
   <header class="site-header">
@@ -106,7 +106,10 @@
             </section>
             <div id="manual-empty" hidden><span class="empty-grid" aria-hidden="true">▦</span><h3 id="manual-empty-title">Start with your players</h3><p id="manual-empty-help">Enter one player name per line in the Player names field.</p><button id="choose-setup-method" class="text-button" type="button">Choose another option</button></div>
           </div>
-          <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
+          <div id="map-viewport" class="map-viewport" hidden>
+            <div id="map-scroll" class="map-scroll" tabindex="0" role="region" aria-label="Formation map; scroll horizontally for more columns" hidden><ol id="formation-grid" class="formation-grid"></ol></div>
+            <div id="map-zoom-controls" class="map-zoom-controls" role="group" aria-label="Map zoom"><span class="map-zoom-hint" hidden>Tap a tile to zoom in</span><button type="button" data-zoom="out" aria-label="Zoom out" title="Zoom out">−</button><button type="button" data-zoom="reset" title="Reset to 100%">100%</button><button type="button" data-zoom="in" aria-label="Zoom in" title="Zoom in">＋</button><button type="button" data-zoom="fit" title="Fit the map in view">Fit</button><span class="sr-only" role="status" aria-live="polite"></span></div>
+          </div>
           <div class="map-footer"><span id="formation-summary">Add players to start shaping your formation.</span><span class="map-orientation">X → <span aria-hidden="true">/</span> Y ↓</span></div>
           <div id="mobile-map-action" class="mobile-map-action" hidden><p id="mobile-map-instruction" role="status"></p><button id="mobile-map-cancel" class="text-button" type="button">Cancel</button></div>
           <nav class="mobile-map-toolbar" aria-label="Map tools">

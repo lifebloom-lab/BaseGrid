@@ -31,6 +31,8 @@ Choose **Full screen** in the Formation header to fill the browser window with t
 
 On phones, full screen uses a compact progress header and **Bases**, **Obstacles**, and **More** controls. The toolbar moves to the side in landscape. **Bases** opens a searchable pool ordered by rank and HQ, with the existing **Auto place** option. Choose a player, then tap the map to add their base. **Obstacles** keeps the chosen size active for repeated placement until **Done**. Swiping pans without dropping an item; tapping a base opens its message, while dragging its handle moves it. **More** contains map expansion, the legend, and help. Panels preserve the map's scroll position and close with their close button or Escape.
 
+**Map zoom:** use **−** and **+** to move between an overview and close-up details. **Fit** shows the map within the available space; click the percentage to return to **100%**. Full-size tiles show coordinates and placement controls; compact tiles show names, HQ levels, and rank badges. Further out, markers retain rank colors and placement status, dropping text when it cannot fit. Tap a compact tile or marker to zoom in on it without starting placement. Zoom works in normal and full-screen views, is remembered in this browser, and never changes coordinates or spacing. Changing zoom cancels an active move.
+
 Planned tiles are neutral, in-progress tiles are blue, and confirmed tiles are green. Obstacles are amber with diagonal stripes. The counts above the map track each state. R labels use consistent colored badges on tiles, in the player panel, and in confirmed coordinates: R1 slate, R2 teal, R3 blue, R4 purple, and R5 gold. Missing groups remain labeled unknown. Copying does not confirm a placement or send a message. If you move a base after copying its message, the tile and side panel remind you to copy the updated coordinates. Other players keep their positions and copy status.
 
 Messages support English, Spanish, Brazilian Portuguese, French, Korean, German, Japanese, and Simplified Chinese. Language names appear on hover and are available to screen readers. Translations are built in and use no API calls. The selected language persists separately from the plan. If clipboard access is unavailable, select and copy the message manually.
@@ -83,6 +85,7 @@ lastwar-api.js            Alliance/member API client and response validation
 import-ui.js              Import dialog, request cancellation, roster review
 roster-cache.js           Local roster/search library; explicit refresh only
 reorder-ui.js             Mouse/touch dragging and accessible keyboard reordering
+map-zoom.js               Map scale, adaptive detail, fit, and anchored zoom
 grid-layout.js           Unit grid, footprint collisions, obstacle sizes, and canvas bounds
 free-formation.js         Legacy coarse-slot layout support for saved-plan migration
 placement-messages.js     Translated placement messages, language preference, and copying
@@ -154,7 +157,7 @@ The repository is ready for a **Worker with Static Assets**. It hosts the planne
 
 Use Workers, including the Worker script, so `/api/lastwar/…` is available. A static-only upload or GitHub Pages cannot run the import relay. Cloudflare installs the pinned deployment tool from this repository. The explicit build command is needed for the dashboard build pipeline; `wrangler.jsonc` also runs the build for local Wrangler commands.
 
-The build copies only the 14 public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
+The build copies only the 16 public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
 
 Saved plans and rosters remain in the visitor's browser. The Cloudflare address has its own storage: existing localhost data does not automatically move to the hosted app. Use the same hosted address consistently to reuse its saved rosters without calling the API again.
 

@@ -149,7 +149,7 @@ export function setupFormationReorder({ grid, map, obstacleTools, validate, onDr
       mapTap = { id: event.pointerId, x: event.clientX, y: event.clientY };
       return;
     }
-    if (event.target.closest('.obstacle-remove, .tile-action, .base-return')) return;
+    if (event.target.closest('.obstacle-remove, .tile-action, .base-return, .slot-zoom')) return;
     const cell = event.target.closest('.slot-reorderable, .obstacle-tool, .base-tool');
     if (!cell || cell.disabled) return;
     if ((event.pointerType === 'touch' || compact()) && !cell.matches('.obstacle-tool, .base-tool') && !event.target.closest('.slot-move')) return;

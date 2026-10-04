@@ -5,7 +5,8 @@ import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './s
 import { getTilePlan, openTilePlacement, confirmTilePlacement, undoTileConfirmation, cancelTilePlacement,
   recordCopiedMessage, moveTile, updateTileDraft, resetTileProgress, migrateTileWorkspace, returnBaseToPool, autoPlaceBases } from './tile-placement.js';
 import { setupRosterImport } from './import-ui.js';
-import { setupFormationReorder } from './reorder-ui.js?v=20261002-map';
+import { setupFormationReorder } from './reorder-ui.js?v=20261004-zoom';
+import { setupMapZoom } from './map-zoom.js';
 import { setupPlacementMessages } from './placement-messages.js';
 
 const byId = id => document.getElementById(id);
@@ -17,6 +18,8 @@ let mapPadding = 1;
 let resetKind = 'clear';
 let poolPlayerId = null;
 let imported = null;
+const mapZoom = setupMapZoom({ map: byId('map-scroll'), grid: byId('formation-grid'), controls: byId('map-zoom-controls'),
+  beforeZoom: () => reorder?.cancel('Placement cancelled. Choose a tool to start again.') });
 const autoPlaceDialog = byId('auto-place-dialog');
 const fullscreenDialog = byId('formation-fullscreen');
 const fullscreenToggle = byId('formation-fullscreen-toggle');
@@ -306,7 +309,7 @@ function change(update, focusId) {
 
 function renderFormation(plan) {
   reorder?.cancel();
-  for (const id of ['reorder-help', 'obstacle-tools', 'map-scroll', 'base-pool']) byId(id).hidden = !plan;
+  for (const id of ['reorder-help', 'obstacle-tools', 'map-scroll', 'map-viewport', 'base-pool']) byId(id).hidden = !plan;
   for (const tool of document.querySelectorAll('.obstacle-tool')) tool.disabled = !plan;
   byId('map-empty').hidden = Boolean(plan);
   const grid = byId('formation-grid');
@@ -337,7 +340,21 @@ function renderFormation(plan) {
     cell.style.top = `calc(${slot.row - canvas.minRow} * var(--cell-size))`;
     cell.style.width = `calc(${slot.size} * var(--cell-size))`;
     cell.style.height = `calc(${slot.size} * var(--cell-size))`;
-    cell.title = `${slot.type === 'obstacle' ? `Obstacle ${slot.size} × ${slot.size}` : slot.name} · X ${slot.x}, Y ${slot.y}`;
+    const player = playersById.get(slot.playerId);
+    const rank = player && normalizeImportedPlayer(player).group;
+    const marker = element('span', 'slot-marker', slot.type === 'obstacle' ? '×'
+      : rank != null ? `R${rank}` : [...slot.name.trim()].slice(0, 2).join('').toLocaleUpperCase());
+    if (rank != null) { marker.classList.add('rank-badge'); marker.dataset.rank = rank; }
+    marker.setAttribute('aria-hidden', 'true');
+    cell.append(marker);
+    const zoom = element('button', 'slot-zoom');
+    zoom.type = 'button';
+    const details = player && playerDetails(player, 'R');
+    const tileDescription = `${slot.type === 'obstacle' ? `Obstacle ${slot.size} × ${slot.size}` : slot.name}${details ? ` · ${details}` : ''} · ${slot.status} · X ${slot.x}, Y ${slot.y}`;
+    zoom.setAttribute('aria-label', `Zoom to ${tileDescription}`);
+    cell.title = tileDescription;
+    zoom.addEventListener('click', () => mapZoom.zoomTo(cell));
+    cell.append(zoom);
     if (slot.playerId && slot.playerId === draft.selectedPlayerId) cell.classList.add('selected');
     const top = element('div', 'slot-top');
     top.append(element('span', 'slot-number', slot.type === 'obstacle' ? `${slot.size} × ${slot.size}` : String(playerNumbers.get(slot.playerId)).padStart(2, '0')));
@@ -400,6 +417,7 @@ function renderFormation(plan) {
     fragment.append(cell);
   }
   grid.append(fragment);
+  mapZoom.render();
   byId('grid-size').textContent = `${canvas.columns} × ${canvas.rows} tiles · 1 tile per step`;
   const blocked = plan.slots.filter(slot => slot.type === 'obstacle').length;
   byId('formation-summary').textContent = `${blocked} ${blocked === 1 ? 'obstacle' : 'obstacles'} · Confirmed bases stay locked. Empty tiles stay empty.`;
@@ -623,6 +641,7 @@ reorder = setupFormationReorder({ grid: byId('formation-grid'), map: byId('map-s
   validate: (kind, from, to, size) => previewGridMove(currentPlan, kind, from, to, size),
   compact: isCompactMap,
   onMoveChange: move => {
+    byId('map-zoom-controls').dataset.placing = String(Boolean(move));
     byId('mobile-map-action').hidden = !isCompactMap() || !move;
     if (!move) return;
     byId('mobile-map-instruction').textContent = move.mode === 'pointer' ? `Moving ${move.name}`
