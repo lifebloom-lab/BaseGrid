@@ -1,4 +1,4 @@
-import { normalizeImportedPlayer } from './players.js';
+import { normalizeImportedPlayer, sortPoolPlayers } from './players.js';
 
 export const BATTLE_KEY = 'basegrid.battles.v1';
 const zone = (id, name, rect) => ({ id, name, rect });
@@ -35,6 +35,18 @@ export const BATTLE_MAPS = {
 export function emptyBattle() { return { title: 'Team A', players: [], assignments: {} }; }
 
 const validPower = value => Number.isSafeInteger(value) && value >= 0;
+const normalizePlayerSort = value => ['rank', 'power', 'name'].includes(value) ? value : 'rank';
+
+export function sortBattlePlayers(players, order = 'rank') {
+  if (normalizePlayerSort(order) === 'rank') return sortPoolPlayers(players);
+  return [...players].sort((a, b) => {
+    if (order === 'power') {
+      const difference = (validPower(b.power) ? b.power : -1) - (validPower(a.power) ? a.power : -1);
+      if (difference) return difference;
+    }
+    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true });
+  });
+}
 
 export function cleanBattlePlayer(player) {
   if (!player || typeof player.id !== 'string' || !player.id || typeof player.name !== 'string' || !player.name.trim()) {
@@ -82,15 +94,17 @@ export function normalizeBattle(value, mapId) {
 
 export function loadBattles(storage) {
   const raw = storage.getItem(BATTLE_KEY);
-  if (!raw) return { version: 1, selectedMap: 'canyon', drafts: { canyon: emptyBattle(), desert: emptyBattle() } };
+  if (!raw) return { version: 1, selectedMap: 'canyon', playerSort: 'rank', drafts: { canyon: emptyBattle(), desert: emptyBattle() } };
   const saved = JSON.parse(raw);
   if (saved?.version !== 1 || !saved.drafts) throw new Error('The saved battle plans could not be opened.');
   return { version: 1, selectedMap: BATTLE_MAPS[saved.selectedMap] ? saved.selectedMap : 'canyon',
+    playerSort: normalizePlayerSort(saved.playerSort),
     drafts: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, saved.drafts[id] ? normalizeBattle(saved.drafts[id], id) : emptyBattle()])) };
 }
 
 export function saveBattles(storage, state) {
   storage.setItem(BATTLE_KEY, JSON.stringify({ version: 1, selectedMap: state.selectedMap,
+    playerSort: normalizePlayerSort(state.playerSort),
     drafts: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, normalizeBattle(state.drafts[id], id)])) }));
 }
 

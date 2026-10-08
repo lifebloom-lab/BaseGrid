@@ -1,7 +1,7 @@
-import { BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, mergeBattlePlayers, restoreBattlePowers, assignBattlePlayer, reorderBattlePlayer, playerZone } from './battle-model.js';
+import { BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone } from './battle-model.js';
 import { drawBattle } from './battle-render.js';
 import { loadWorkspace } from './storage.js';
-import { playersFromDraft, sortPoolPlayers } from './players.js';
+import { playersFromDraft } from './players.js';
 import { createRosterCache } from './roster-cache.js';
 
 const compactPower = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
@@ -14,7 +14,7 @@ const make = (tag, className, text) => {
   if (text !== undefined) node.textContent = text;
   return node;
 };
-let state = { version: 1, selectedMap: 'canyon', drafts: { canyon: emptyBattle(), desert: emptyBattle() } };
+let state = { version: 1, selectedMap: 'canyon', playerSort: 'rank', drafts: { canyon: emptyBattle(), desert: emptyBattle() } };
 let storageReady = true;
 try { state = loadBattles(window.localStorage); }
 catch { storageReady = false; showError('Saved battle plans could not be opened. Changes will stay in this tab only; the existing saved data is preserved.'); }
@@ -50,6 +50,7 @@ function change(next, message) {
 function syncSettings() {
   $('battle-map').value = state.selectedMap;
   $('battle-title').value = plan().title;
+  $('battle-sort').value = state.playerSort;
 }
 function getImage(template) {
   if (!images.has(template.id)) images.set(template.id, new Promise((resolve, reject) => {
@@ -171,7 +172,7 @@ function renderPlayers() {
   const roster = plan().players;
   const unassigned = roster.filter(player => playerZone(plan(), player.id) === null);
   const query = $('battle-search').value.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
-  const players = sortPoolPlayers(poolOnly ? unassigned : roster).filter(player => player.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(query));
+  const players = sortBattlePlayers(poolOnly ? unassigned : roster, state.playerSort).filter(player => player.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(query));
   $('battle-player-count').textContent = roster.length + ' players';
   $('battle-unassigned-count').textContent = unassigned.length;
   $('battle-unassigned-tab').setAttribute('aria-pressed', String(poolOnly));
@@ -255,6 +256,10 @@ $('battle-map').addEventListener('change', () => {
 });
 $('battle-title').addEventListener('input', () => { state.drafts[state.selectedMap] = { ...plan(), title: $('battle-title').value }; persist(); renderMap(); });
 $('battle-search').addEventListener('input', renderPlayers);
+$('battle-sort').addEventListener('change', () => {
+  state.playerSort = $('battle-sort').value;
+  persist(); renderPlayers();
+});
 $('battle-unassigned-tab').addEventListener('click', () => { poolOnly = true; renderPlayers(); });
 $('battle-all-tab').addEventListener('click', () => { poolOnly = false; renderPlayers(); });
 $('battle-zone-select').addEventListener('change', () => {

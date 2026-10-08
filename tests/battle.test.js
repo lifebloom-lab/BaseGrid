@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BATTLE_KEY, BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames } from '../battle-model.js';
+import { BATTLE_KEY, BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames } from '../battle-model.js';
 
 const roster = [
   { id: 'lastwar:1', name: 'Same', hqLevel: 35, group: 5, power: 123456789, apiKey: 'never-copy' },
@@ -45,12 +45,15 @@ test('both battle drafts round-trip separately without touching BaseGrid workspa
   const data = new Map([['basegrid.workspace.v1', 'formation unchanged'], ['basegrid.rosters.v1', 'cache unchanged']]);
   const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
   const state = loadBattles(storage);
+  assert.equal(state.playerSort, 'rank');
+  state.playerSort = 'power';
   state.drafts.canyon = assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power');
   state.drafts.desert = assignBattlePlayer(fresh(), 'desert', 'lastwar:2', 'hospital-1');
   state.selectedMap = 'desert';
   saveBattles(storage, state);
   const restored = loadBattles(storage);
   assert.equal(restored.selectedMap, 'desert');
+  assert.equal(restored.playerSort, 'power');
   assert.equal(playerZone(restored.drafts.canyon, 'lastwar:1'), 'power');
   assert.equal(playerZone(restored.drafts.desert, 'lastwar:2'), 'hospital-1');
   assert.equal(restored.drafts.canyon.players[0].power, 123456789);
@@ -60,6 +63,32 @@ test('both battle drafts round-trip separately without touching BaseGrid workspa
   assert.equal(data.get('basegrid.workspace.v1'), 'formation unchanged');
   assert.equal(data.get('basegrid.rosters.v1'), 'cache unchanged');
   assert.ok(data.has(BATTLE_KEY));
+  const legacy = JSON.parse(data.get(BATTLE_KEY));
+  delete legacy.playerSort;
+  assert.equal(loadBattles({ getItem: () => JSON.stringify(legacy) }).playerSort, 'rank');
+  legacy.playerSort = 'unknown';
+  assert.equal(loadBattles({ getItem: () => JSON.stringify(legacy) }).playerSort, 'rank');
+});
+
+test('pool sorting handles power, natural alphabetical order and rank without changing teams or player records', () => {
+  const players = [
+    { id: '1', name: 'Zulu', power: 100, group: 1, hqLevel: 30 },
+    { id: '2', name: 'Alpha 10', power: 100, group: 4, hqLevel: 30 },
+    { id: '3', name: 'alpha 2', power: 200, group: 3, hqLevel: 35 },
+    { id: '4', name: 'Élodie', power: null, group: 5, hqLevel: 20 },
+    { id: '5', name: 'Boreal', power: 0, group: 4, hqLevel: 32 },
+    { id: '6', name: 'Aurora' },
+    { id: '7', name: 'alpha 2', power: 200, group: 3, hqLevel: 31 },
+  ];
+  const plan = assignBattlePlayer(mergeBattlePlayers(emptyBattle(), players), 'canyon', '1', 'power');
+  const before = structuredClone(plan);
+  const ids = order => sortBattlePlayers(plan.players, order).map(player => player.id);
+  assert.deepEqual(ids('power'), ['3', '7', '2', '1', '5', '6', '4']);
+  assert.deepEqual(ids('name'), ['3', '7', '2', '6', '5', '4', '1']);
+  assert.deepEqual(ids('rank'), ['4', '5', '2', '3', '7', '1', '6']);
+  assert.deepEqual(ids('unknown'), ids('rank'));
+  assert.deepEqual(plan, before);
+  assert.equal(sortBattlePlayers(plan.players, 'power')[0], plan.players[2]);
 });
 
 test('old battle drafts recover missing power by imported ID, without replacing known data or assignments', () => {
