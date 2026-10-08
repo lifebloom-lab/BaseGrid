@@ -18,6 +18,10 @@
 .battle-select select:hover:not(:disabled) { border-color:#658378; }
 .battle-select select:focus-visible { outline:2px solid var(--mint); outline-offset:2px; }
 .battle-select-chevron { position:absolute; right:14px; top:50%; transform:translateY(-50%); pointer-events:none; color:var(--muted); }
+.battle-plan-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.battle-plan-actions .button { flex:1; min-height:40px; padding:8px 7px; font-size:.75rem; }
+#battle-plan-help { margin-bottom:0; }
+#battle-plan-error { color:var(--error, #f2bcb5); }
 .battle-app .optional { font-size:.75rem; font-weight:400; color:var(--muted); margin-left:5px; }
 .battle-app .field-help { font-size:.78rem; line-height:1.5; margin-top:8px; }
 .battle-section-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }

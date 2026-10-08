@@ -1,4 +1,4 @@
-import { BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone } from './battle-model.js';
+import { BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone } from './battle-model.js';
 import { drawBattle } from './battle-render.js';
 import { loadWorkspace } from './storage.js';
 import { playersFromDraft } from './players.js';
@@ -14,13 +14,18 @@ const make = (tag, className, text) => {
   if (text !== undefined) node.textContent = text;
   return node;
 };
-let state = { version: 1, selectedMap: 'canyon', playerSort: 'rank', drafts: { canyon: emptyBattle(), desert: emptyBattle() } };
+let state = emptyBattles();
 let storageReady = true;
 try { state = loadBattles(window.localStorage); }
 catch { storageReady = false; showError('Saved battle plans could not be opened. Changes will stay in this tab only; the existing saved data is preserved.'); }
-const plan = () => state.drafts[state.selectedMap];
+const plan = () => currentBattle(state);
 const map = () => BATTLE_MAPS[state.selectedMap];
-const history = { canyon: [], desert: [] };
+const history = new Map();
+const planHistory = () => {
+  if (!history.has(plan().id)) history.set(plan().id, []);
+  return history.get(plan().id);
+};
+let planAction = 'new';
 let selectedPlayer = null;
 let selectedZone = map().zones[0].id;
 let poolOnly = true;
@@ -41,16 +46,40 @@ function persist() {
 }
 function change(next, message) {
   if (next === plan()) return;
-  history[state.selectedMap].push(structuredClone(plan()));
-  if (history[state.selectedMap].length > 30) history[state.selectedMap].shift();
-  state.drafts[state.selectedMap] = next;
+  planHistory().push(structuredClone(plan()));
+  if (planHistory().length > 30) planHistory().shift();
+  state = updateBattlePlan(state, next);
   persist(); render();
   if (message) announce(message);
 }
 function syncSettings() {
   $('battle-map').value = state.selectedMap;
-  $('battle-title').value = plan().title;
+  $('battle-plan').replaceChildren(...state.plans[state.selectedMap].map(plan => {
+    const option = make('option', '', plan.title); option.value = plan.id; return option;
+  }));
+  $('battle-plan').value = plan().id;
   $('battle-sort').value = state.playerSort;
+}
+function openedPlan(message) {
+  selectedPlayer = null; cancelDrag(); selectedZone = map().zones[0].id; lastDraw = null;
+  poolOnly = true;
+  $('battle-search').value = ''; $('battle-map-scroll').scrollTo(0, 0);
+  $('battle-zones').replaceChildren(); $('battle-canvas').width = 0;
+  syncSettings(); persist(); render();
+  announce(message ?? 'Opened ' + plan().title + ' · ' + map().name + '.');
+}
+function openPlanDialog(action) {
+  planAction = action;
+  const duplicate = action === 'duplicate';
+  const rename = action === 'rename';
+  $('battle-plan-dialog-title').textContent = rename ? 'Rename plan' : duplicate ? 'Duplicate plan' : 'New plan';
+  $('battle-plan-dialog-help').textContent = map().name + ' · ' + (rename ? 'Change this plan’s title.' : duplicate
+    ? 'Copy players and assignments from ' + plan().title + '.' : 'Start with the same players, all unassigned.');
+  $('battle-title').value = rename ? plan().title : suggestedBattleTitle(state, duplicate);
+  $('battle-plan-submit').textContent = rename ? 'Save title' : duplicate ? 'Duplicate plan' : 'Create plan';
+  $('battle-plan-error').hidden = true;
+  $('battle-title').removeAttribute('aria-invalid');
+  $('battle-plan-dialog').showModal(); $('battle-title').focus(); $('battle-title').select();
 }
 function getImage(template) {
   if (!images.has(template.id)) images.set(template.id, new Promise((resolve, reject) => {
@@ -290,19 +319,38 @@ async function renderMap() {
 function render() {
   $('battle-map-name').textContent = map().name;
   $('battle-progress').textContent = plan().players.filter(player => playerZone(plan(), player.id) !== null).length + ' assigned · ' + plan().players.filter(player => playerZone(plan(), player.id) === null).length + ' unassigned';
-  $('battle-undo').disabled = !history[state.selectedMap].length;
+  $('battle-undo').disabled = !planHistory().length;
   $('battle-reset').disabled = !Object.values(plan().assignments).some(ids => ids.length);
   renderPlayers(); renderTeam(); selection(); renderMap();
 }
 
 $('battle-map').addEventListener('change', () => {
-  state.selectedMap = $('battle-map').value;
-  selectedPlayer = null; cancelDrag(); selectedZone = map().zones[0].id; lastDraw = null;
-  $('battle-search').value = ''; $('battle-map-scroll').scrollTo(0, 0);
-  $('battle-zones').replaceChildren(); $('battle-canvas').width = 0;
-  syncSettings(); persist(); render(); announce('Opened your ' + map().name + ' draft.');
+  state = selectBattlePlan(state, $('battle-map').value);
+  openedPlan();
 });
-$('battle-title').addEventListener('input', () => { state.drafts[state.selectedMap] = { ...plan(), title: $('battle-title').value }; persist(); renderMap(); });
+$('battle-plan').addEventListener('change', () => {
+  state = selectBattlePlan(state, state.selectedMap, $('battle-plan').value);
+  openedPlan();
+});
+for (const action of ['new', 'duplicate', 'rename']) $('battle-plan-' + action).addEventListener('click', () => openPlanDialog(action));
+$('battle-plan-cancel').addEventListener('click', () => $('battle-plan-dialog').close());
+$('battle-title').addEventListener('input', () => {
+  $('battle-title').removeAttribute('aria-invalid'); $('battle-plan-error').hidden = true;
+});
+$('battle-plan-form').addEventListener('submit', event => {
+  event.preventDefault();
+  try {
+    state = planAction === 'rename' ? updateBattlePlan(state, { ...plan(), title: $('battle-title').value })
+      : createBattlePlan(state, $('battle-title').value, { duplicate: planAction === 'duplicate' });
+    $('battle-plan-dialog').close();
+    if (planAction === 'rename') { syncSettings(); persist(); render(); announce('Plan renamed to ' + plan().title + '.'); }
+    else openedPlan(plan().title + ' created · ' + map().name + '.');
+    $('battle-plan').focus();
+  } catch (error) {
+    $('battle-plan-error').textContent = error.message; $('battle-plan-error').hidden = false;
+    $('battle-title').setAttribute('aria-invalid', 'true'); $('battle-title').focus();
+  }
+});
 $('battle-search').addEventListener('input', renderPlayers);
 $('battle-sort').addEventListener('change', () => {
   state.playerSort = $('battle-sort').value;
@@ -340,9 +388,9 @@ $('battle-names-form').addEventListener('submit', event => {
   $('battle-names-dialog').close();
 });
 $('battle-undo').addEventListener('click', () => {
-  const previous = history[state.selectedMap].pop();
+  const previous = planHistory().pop();
   if (!previous) return;
-  state.drafts[state.selectedMap] = previous; selectedPlayer = null;
+  state = updateBattlePlan(state, { ...previous, title: plan().title }); selectedPlayer = null;
   syncSettings(); persist(); render(); announce('Last change undone.');
 });
 $('battle-reset').addEventListener('click', () => { $('battle-reset-dialog').returnValue = 'cancel'; $('battle-reset-dialog').showModal(); });
@@ -360,7 +408,8 @@ $('battle-export').addEventListener('click', async () => {
     exportUrl = URL.createObjectURL(blob);
     $('battle-export-image').src = exportUrl;
     $('battle-download').href = exportUrl;
-    $('battle-download').download = 'basegrid-' + template.id + '-' + new Date().toISOString().slice(0, 10) + '.png';
+    const title = snapshot.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 80);
+    $('battle-download').download = 'basegrid-' + template.id + '-' + title + '-' + new Date().toISOString().slice(0, 10) + '.png';
     const missing = snapshot.players.length - drawing.assigned;
     $('battle-export-summary').textContent = drawing.canvas.width + ' × ' + drawing.canvas.height + ' PNG · ' + drawing.assigned + ' assigned' + (missing ? ' · ' + missing + ' unassigned players are not shown' : ' · Everyone included');
     $('battle-export-dialog').showModal();
@@ -374,5 +423,5 @@ $('battle-export-dialog').addEventListener('close', () => {
 });
 window.addEventListener('focus', renderSource);
 const savedPlayers = [...sourcePlayers(), ...createRosterCache().listRosters().flatMap(roster => roster.data)];
-for (const id of Object.keys(BATTLE_MAPS)) state.drafts[id] = restoreBattlePowers(state.drafts[id], savedPlayers);
+for (const id of Object.keys(BATTLE_MAPS)) state.plans[id] = state.plans[id].map(plan => restoreBattlePowers(plan, savedPlayers));
 syncSettings(); renderSource(); persist(); render();

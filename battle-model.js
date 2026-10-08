@@ -1,6 +1,7 @@
 import { normalizeImportedPlayer, sortPoolPlayers } from './players.js';
 
-export const BATTLE_KEY = 'basegrid.battles.v1';
+export const BATTLE_KEY = 'basegrid.battles.v2';
+export const LEGACY_BATTLE_KEY = 'basegrid.battles.v1';
 const zone = (id, name, rect) => ({ id, name, rect });
 const desertZone = (id, name, label, color, rect, bottom) => ({ id, name, rect, card: { label, color, bottom } });
 export const BATTLE_MAPS = {
@@ -93,20 +94,102 @@ export function normalizeBattle(value, mapId) {
     players, assignments };
 }
 
+export function emptyBattles() {
+  return { version: 2, selectedMap: 'canyon', playerSort: 'rank',
+    selectedPlans: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, 'initial-' + id])),
+    plans: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, [{ id: 'initial-' + id, ...emptyBattle() }]])) };
+}
+
+const titleKey = title => title.trim().normalize('NFKC').toLocaleLowerCase('en');
+function checkTitle(plans, title, exceptId) {
+  const clean = typeof title === 'string' ? title.trim() : '';
+  if (!clean) throw new Error('Enter a plan title.');
+  if (clean.length > 100) throw new Error('Use 100 characters or fewer.');
+  if (plans.some(plan => plan.id !== exceptId && titleKey(plan.title) === titleKey(clean))) {
+    throw new Error('A plan with this title already exists for this event. Choose another title.');
+  }
+  return clean;
+}
+
+function normalizeBattles(saved) {
+  if (saved?.version !== 2 || !saved.plans) throw new Error('The saved battle plans could not be opened.');
+  const ids = new Set();
+  const plans = Object.fromEntries(Object.keys(BATTLE_MAPS).map(mapId => {
+    if (!Array.isArray(saved.plans[mapId]) || !saved.plans[mapId].length) throw new Error('Missing battle plans.');
+    const normalized = [];
+    for (const value of saved.plans[mapId]) {
+      if (typeof value?.id !== 'string' || !value.id || ids.has(value.id)) throw new Error('Invalid plan identity.');
+      ids.add(value.id);
+      const title = checkTitle(normalized, value.title);
+      normalized.push({ id: value.id, ...normalizeBattle(value, mapId), title });
+    }
+    return [mapId, normalized];
+  }));
+  return { version: 2, selectedMap: BATTLE_MAPS[saved.selectedMap] ? saved.selectedMap : 'canyon',
+    playerSort: normalizePlayerSort(saved.playerSort), plans,
+    selectedPlans: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id,
+      plans[id].some(plan => plan.id === saved.selectedPlans?.[id]) ? saved.selectedPlans[id] : plans[id][0].id])) };
+}
+
 export function loadBattles(storage) {
   const raw = storage.getItem(BATTLE_KEY);
-  if (!raw) return { version: 1, selectedMap: 'canyon', playerSort: 'rank', drafts: { canyon: emptyBattle(), desert: emptyBattle() } };
-  const saved = JSON.parse(raw);
+  if (raw !== null) return normalizeBattles(JSON.parse(raw));
+  const legacy = storage.getItem(LEGACY_BATTLE_KEY);
+  const state = emptyBattles();
+  if (legacy === null) return state;
+  const saved = JSON.parse(legacy);
   if (saved?.version !== 1 || !saved.drafts) throw new Error('The saved battle plans could not be opened.');
-  return { version: 1, selectedMap: BATTLE_MAPS[saved.selectedMap] ? saved.selectedMap : 'canyon',
-    playerSort: normalizePlayerSort(saved.playerSort),
-    drafts: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, saved.drafts[id] ? normalizeBattle(saved.drafts[id], id) : emptyBattle()])) };
+  state.selectedMap = BATTLE_MAPS[saved.selectedMap] ? saved.selectedMap : 'canyon';
+  state.playerSort = normalizePlayerSort(saved.playerSort);
+  for (const mapId of Object.keys(BATTLE_MAPS)) {
+    const draft = saved.drafts[mapId] ? normalizeBattle(saved.drafts[mapId], mapId) : emptyBattle();
+    state.plans[mapId] = [{ id: state.selectedPlans[mapId], ...draft, title: draft.title.trim() || 'Team A' }];
+  }
+  return state;
 }
 
 export function saveBattles(storage, state) {
-  storage.setItem(BATTLE_KEY, JSON.stringify({ version: 1, selectedMap: state.selectedMap,
-    playerSort: normalizePlayerSort(state.playerSort),
-    drafts: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, normalizeBattle(state.drafts[id], id)])) }));
+  // Keep the old single-draft data as a migration backup.
+  storage.setItem(BATTLE_KEY, JSON.stringify(normalizeBattles(state)));
+}
+
+export function currentBattle(state, mapId = state.selectedMap) {
+  return state.plans[mapId].find(plan => plan.id === state.selectedPlans[mapId]);
+}
+
+export function selectBattlePlan(state, mapId, planId = state.selectedPlans[mapId]) {
+  if (!state.plans[mapId]?.some(plan => plan.id === planId)) throw new Error('This plan could not be found.');
+  return { ...state, selectedMap: mapId, selectedPlans: { ...state.selectedPlans, [mapId]: planId } };
+}
+
+export function updateBattlePlan(state, next) {
+  const mapId = state.selectedMap;
+  const id = currentBattle(state).id;
+  const title = checkTitle(state.plans[mapId], next.title, id);
+  const updated = { id, ...normalizeBattle(next, mapId), title };
+  return { ...state, plans: { ...state.plans, [mapId]: state.plans[mapId].map(plan => plan.id === id ? updated : plan) } };
+}
+
+export function suggestedBattleTitle(state, duplicate = false) {
+  const plans = state.plans[state.selectedMap];
+  const taken = title => plans.some(plan => titleKey(plan.title) === titleKey(title));
+  const base = duplicate ? currentBattle(state).title.slice(0, 85) + ' (copy)' : 'Team A';
+  if (!taken(base)) return base;
+  for (let n = 2; ; n++) {
+    const title = duplicate ? base + ' ' + n : n <= 26 ? 'Team ' + String.fromCharCode(64 + n) : 'Team ' + n;
+    if (!taken(title)) return title;
+  }
+}
+
+export function createBattlePlan(state, title, { duplicate = false, id = crypto.randomUUID() } = {}) {
+  const mapId = state.selectedMap;
+  if (!id || Object.values(state.plans).some(plans => plans.some(plan => plan.id === id))) throw new Error('Invalid plan identity.');
+  const cleanTitle = checkTitle(state.plans[mapId], title);
+  const source = currentBattle(state);
+  // Normalization copies players and assignment arrays; copies never share editable data.
+  const created = { id, ...normalizeBattle({ ...source, title: cleanTitle, assignments: duplicate ? source.assignments : {} }, mapId) };
+  return { ...state, selectedPlans: { ...state.selectedPlans, [mapId]: id },
+    plans: { ...state.plans, [mapId]: [...state.plans[mapId], created] } };
 }
 
 export function mergeBattlePlayers(plan, incoming) {

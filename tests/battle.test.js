@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BATTLE_KEY, BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
+import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
   { id: 'lastwar:1', name: 'Same', hqLevel: 35, group: 5, power: 123456789, apiKey: 'never-copy' },
@@ -41,33 +41,123 @@ test('assignment moves only the chosen identity, never duplicates a player acros
   assert.throws(() => assignBattlePlayer(first, 'canyon', 'unknown', 'power'));
 });
 
-test('both battle drafts round-trip separately without touching BaseGrid workspace or roster caches', () => {
-  const data = new Map([['basegrid.workspace.v1', 'formation unchanged'], ['basegrid.rosters.v1', 'cache unchanged']]);
-  const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
-  const state = loadBattles(storage);
-  assert.equal(state.playerSort, 'rank');
+const memoryStorage = (entries = []) => {
+  const data = new Map(entries);
+  return { data, getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+};
+
+test('multiple named plans round-trip independently for each event and remember the selected plan', () => {
+  const storage = memoryStorage([['basegrid.workspace.v1', 'formation unchanged'], ['basegrid.rosters.v1', 'cache unchanged']]);
+  let state = loadBattles(storage);
   state.playerSort = 'power';
-  state.drafts.canyon = assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power');
-  state.drafts.desert = assignBattlePlayer(fresh(), 'desert', 'lastwar:2', 'hospital-1');
-  state.selectedMap = 'desert';
+  state = updateBattlePlan(state, assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power'));
+  const teamA = structuredClone(currentBattle(state));
+  state = createBattlePlan(state, 'Team B', { id: 'canyon-b' });
+  assert.deepEqual(currentBattle(state).players, teamA.players);
+  assert.equal(playerZone(currentBattle(state), 'lastwar:1'), null);
+  state = updateBattlePlan(state, assignBattlePlayer(currentBattle(state), 'canyon', 'lastwar:2', 'virus'));
+  state = selectBattlePlan(state, 'desert');
+  state = updateBattlePlan(state, assignBattlePlayer(fresh(), 'desert', 'lastwar:2', 'hospital-1'));
+  state = createBattlePlan(state, 'Team B', { id: 'desert-b', duplicate: true });
   saveBattles(storage, state);
-  const restored = loadBattles(storage);
+  let restored = loadBattles(storage);
   assert.equal(restored.selectedMap, 'desert');
   assert.equal(restored.playerSort, 'power');
-  assert.equal(playerZone(restored.drafts.canyon, 'lastwar:1'), 'power');
-  assert.equal(playerZone(restored.drafts.desert, 'lastwar:2'), 'hospital-1');
-  assert.equal(restored.drafts.canyon.players[0].power, 123456789);
-  restored.drafts.canyon.assignments = {};
+  assert.equal(currentBattle(restored).id, 'desert-b');
+  assert.equal(playerZone(currentBattle(restored), 'lastwar:2'), 'hospital-1');
+  restored = selectBattlePlan(restored, 'canyon');
+  assert.equal(currentBattle(restored).id, 'canyon-b');
+  assert.equal(playerZone(currentBattle(restored), 'lastwar:2'), 'virus');
+  assert.deepEqual(restored.plans.canyon[0], teamA);
+  restored = updateBattlePlan(restored, { ...currentBattle(restored), assignments: {} });
   saveBattles(storage, restored);
-  assert.equal(playerZone(loadBattles(storage).drafts.desert, 'lastwar:2'), 'hospital-1');
-  assert.equal(data.get('basegrid.workspace.v1'), 'formation unchanged');
-  assert.equal(data.get('basegrid.rosters.v1'), 'cache unchanged');
-  assert.ok(data.has(BATTLE_KEY));
-  const legacy = JSON.parse(data.get(BATTLE_KEY));
-  delete legacy.playerSort;
-  assert.equal(loadBattles({ getItem: () => JSON.stringify(legacy) }).playerSort, 'rank');
-  legacy.playerSort = 'unknown';
-  assert.equal(loadBattles({ getItem: () => JSON.stringify(legacy) }).playerSort, 'rank');
+  assert.deepEqual(loadBattles(storage).plans.canyon[0], teamA);
+  assert.equal(playerZone(currentBattle(loadBattles(storage), 'desert'), 'lastwar:2'), 'hospital-1');
+  assert.equal(storage.data.get('basegrid.workspace.v1'), 'formation unchanged');
+  assert.equal(storage.data.get('basegrid.rosters.v1'), 'cache unchanged');
+});
+
+test('legacy single drafts migrate with titles, roster metadata, assignments and settings intact, retaining the original backup', () => {
+  const legacy = { version: 1, selectedMap: 'desert', playerSort: 'name', drafts: {
+    canyon: { ...assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power'), title: 'Weekly A' },
+    desert: { ...assignBattlePlayer(fresh(), 'desert', 'lastwar:2', 'silo'), title: '' },
+  } };
+  const raw = JSON.stringify(legacy);
+  const storage = memoryStorage([[LEGACY_BATTLE_KEY, raw]]);
+  const state = loadBattles(storage);
+  assert.equal(state.version, 2);
+  assert.equal(state.selectedMap, 'desert');
+  assert.equal(state.playerSort, 'name');
+  assert.equal(currentBattle(state).title, 'Team A');
+  assert.equal(currentBattle(state, 'canyon').title, 'Weekly A');
+  assert.deepEqual(currentBattle(state, 'canyon').players, legacy.drafts.canyon.players);
+  assert.equal(playerZone(currentBattle(state, 'canyon'), 'lastwar:1'), 'power');
+  assert.equal(playerZone(currentBattle(state), 'lastwar:2'), 'silo');
+  assert.equal(storage.getItem(BATTLE_KEY), null, 'loading alone does not write');
+  saveBattles(storage, state);
+  assert.deepEqual(loadBattles(storage), state);
+  assert.equal(storage.getItem(LEGACY_BATTLE_KEY), raw);
+  storage.setItem(LEGACY_BATTLE_KEY, 'old tab wrote something else');
+  assert.deepEqual(loadBattles(storage), state, 'saved library takes precedence over old drafts');
+});
+
+test('new and duplicate plans never share mutable roster or assignment data with their source', () => {
+  let state = updateBattlePlan(emptyBattles(), assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power'));
+  const before = structuredClone(state);
+  assert.equal(suggestedBattleTitle(state), 'Team B');
+  const copy = createBattlePlan(state, 'Team A – next week', { duplicate: true, id: 'copy' });
+  assert.deepEqual(currentBattle(copy).assignments, currentBattle(state).assignments);
+  currentBattle(copy).players[0].name = 'Edited';
+  currentBattle(copy).assignments.power.push('lastwar:2');
+  assert.deepEqual(state, before);
+  assert.deepEqual(copy.plans.canyon[0], currentBattle(state));
+  const blank = createBattlePlan(state, 'Team B', { id: 'new' });
+  currentBattle(blank).players[0].power = 9;
+  assert.deepEqual(state, before);
+  assert.ok(Object.values(currentBattle(blank).assignments).every(list => list.length === 0));
+});
+
+test('renaming keeps the plan identity and assignments, and duplicate titles cannot replace an existing plan', () => {
+  let state = updateBattlePlan(emptyBattles(), assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power'));
+  const id = currentBattle(state).id;
+  state = createBattlePlan(state, 'Team B', { id: 'team-b' });
+  const before = structuredClone(state);
+  for (const title of ['Team A', '  team a  ', 'Ｔｅａｍ Ａ']) {
+    assert.throws(() => createBattlePlan(state, title), /already exists/);
+    assert.throws(() => updateBattlePlan(state, { ...currentBattle(state), title }), /already exists/);
+  }
+  for (const title of ['', '   ', 'x'.repeat(101)]) assert.throws(() => createBattlePlan(state, title));
+  assert.deepEqual(state, before);
+  state = selectBattlePlan(state, 'canyon', id);
+  state = updateBattlePlan(state, { ...currentBattle(state), title: '  Team A · Week 2  ' });
+  assert.equal(currentBattle(state).title, 'Team A · Week 2');
+  assert.equal(currentBattle(state).id, id);
+  assert.equal(playerZone(currentBattle(state), 'lastwar:1'), 'power');
+  assert.equal(state.plans.canyon[1].title, 'Team B');
+  assert.throws(() => selectBattlePlan(state, 'canyon', 'missing'));
+  assert.throws(() => createBattlePlan(state, 'Other', { id }));
+});
+
+test('invalid libraries preserve existing data instead of silently falling back to old drafts', () => {
+  const storage = memoryStorage([[LEGACY_BATTLE_KEY, JSON.stringify({ version: 1, drafts: {} })]]);
+  for (const raw of ['{bad json', JSON.stringify({ version: 3 }), JSON.stringify({ ...emptyBattles(), plans: { canyon: [] } })]) {
+    storage.setItem(BATTLE_KEY, raw);
+    assert.throws(() => loadBattles(storage));
+    assert.equal(storage.getItem(BATTLE_KEY), raw);
+  }
+  const state = emptyBattles();
+  state.plans.canyon.push({ ...state.plans.canyon[0], id: 'another' });
+  assert.throws(() => saveBattles(storage, state), /already exists/);
+  state.plans.canyon[1].title = 'Team B';
+  state.plans.canyon[1].id = state.plans.desert[0].id;
+  assert.throws(() => saveBattles(storage, state), /identity/);
+  const valid = emptyBattles();
+  valid.playerSort = 'unknown';
+  valid.selectedPlans.canyon = 'missing';
+  storage.setItem(BATTLE_KEY, JSON.stringify(valid));
+  const restored = loadBattles(storage);
+  assert.equal(restored.playerSort, 'rank');
+  assert.equal(currentBattle(restored).id, restored.plans.canyon[0].id);
 });
 
 test('pool sorting handles power, natural alphabetical order and rank without changing teams or player records', () => {
