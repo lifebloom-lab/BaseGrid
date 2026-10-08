@@ -76,6 +76,7 @@ function selection() {
   if (!player) selectedPlayer = null;
   $('battle-selection').hidden = !player;
   $('battle-selection-name').textContent = player ? player.name + ' selected — choose a zone' : '';
+  document.querySelectorAll('.battle-chip-name').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.playerId === selectedPlayer)));
 }
 function choosePlayer(id) {
   selectedPlayer = selectedPlayer === id ? null : id;
@@ -140,8 +141,8 @@ function animateDrag() {
 }
 document.addEventListener('pointerdown', event => {
   suppressDragClick = false;
-  const source = event.target.closest('.battle-player');
-  if (!source || event.button !== 0 || !event.isPrimary || (event.pointerType === 'touch' && !event.target.closest('.battle-drag-grip'))) return;
+  const source = event.target.closest('.battle-player, .battle-chip-name');
+  if (!source || event.button !== 0 || !event.isPrimary || (event.pointerType === 'touch' && !source.matches('.battle-chip-name') && !event.target.closest('.battle-drag-grip'))) return;
   cancelDrag();
   drag = { source, id: source.dataset.playerId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false };
 });
@@ -204,35 +205,82 @@ function renderTeam() {
   }));
   for (const button of $('battle-zones').children) button.classList.toggle('active', button.dataset.zone === zone.id);
 }
+
+function zoneControl(zone, canvas, snapshot) {
+  const container = make('div', 'battle-zone');
+  container.dataset.zone = zone.id;
+  container.setAttribute('role', 'group'); container.setAttribute('aria-label', zone.name + ' team');
+  container.style.left = zone.x / canvas.width * 100 + '%';
+  container.style.top = (zone.y + zone.headerHeight) / canvas.height * 100 + '%';
+  container.style.width = zone.w / canvas.width * 100 + '%';
+  container.style.height = (zone.h - zone.headerHeight) / canvas.height * 100 + '%';
+  container.classList.toggle('active', zone.id === selectedZone);
+  container.classList.toggle('crowded', zone.text.overflow);
+  const target = make('button', 'battle-zone-target'); target.type = 'button';
+  target.setAttribute('aria-label', zone.name + ', ' + zone.names.length + ' assigned');
+  target.title = zone.name + ' · Select team or drop names here';
+  if (!zone.names.length) target.append(make('span', 'zone-placeholder', '+ Names'));
+  container.append(target);
+  container.addEventListener('click', event => {
+    if (event.target.closest('.battle-chip')) return;
+    if (selectedPlayer) assign(selectedPlayer, zone.id);
+    else { selectedZone = zone.id; renderTeam(); announce(zone.name + ' · ' + zone.names.length + ' assigned.'); }
+  });
+  if (zone.names.length) {
+    const list = make('ul', 'battle-zone-players'); list.setAttribute('aria-label', 'Players in ' + zone.name);
+    for (const id of snapshot.assignments[zone.id] ?? []) {
+      const player = snapshot.players.find(player => player.id === id);
+      if (!player) continue;
+      const chip = make('li', 'battle-chip');
+      const name = make('button', 'battle-chip-name', player.name); name.type = 'button';
+      name.dataset.playerId = id; name.setAttribute('aria-label', 'Select ' + player.name);
+      name.setAttribute('aria-pressed', String(selectedPlayer === id)); name.title = player.name + ' · Drag or select to move';
+      name.addEventListener('click', () => choosePlayer(id));
+      const remove = make('button', 'battle-chip-remove'); remove.type = 'button'; remove.dataset.playerId = id;
+      const label = 'Return ' + player.name + ' to pool'; remove.setAttribute('aria-label', label); remove.title = label;
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) icon.setAttribute(key, value);
+      const circle = document.createElementNS(icon.namespaceURI, 'circle');
+      circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '9');
+      const cross = document.createElementNS(icon.namespaceURI, 'path'); cross.setAttribute('d', 'M9 9l6 6M15 9l-6 6');
+      icon.append(circle, cross); remove.append(icon);
+      remove.addEventListener('click', () => assign(id, null));
+      chip.append(name, remove); list.append(chip);
+    }
+    container.append(list);
+  }
+  return container;
+}
+
 async function renderMap() {
   const version = ++renderVersion;
   const template = map();
   const snapshot = structuredClone(plan());
+  const focused = document.activeElement;
+  const focusZone = focused.closest('.battle-zone')?.dataset.zone;
+  const focusClass = focused.matches('.battle-chip-remove') ? 'battle-chip-remove' : 'battle-chip-name';
+  const focusIndex = focusZone ? [...focused.closest('.battle-zone').querySelectorAll('.' + focusClass)].indexOf(focused) : -1;
+  const zoneScroll = new Map([...$('battle-zones').children].map(zone => [zone.dataset.zone, zone.querySelector('.battle-zone-players')?.scrollTop ?? 0]));
   $('battle-export').disabled = true;
   $('battle-map-stage').setAttribute('aria-busy', 'true');
   try {
     const image = await getImage(template);
     if (version !== renderVersion) return;
-    lastDraw = drawBattle(template, snapshot, image);
+    lastDraw = drawBattle(template, snapshot, image, { editing: true });
     const canvas = $('battle-canvas');
     canvas.width = lastDraw.canvas.width; canvas.height = lastDraw.canvas.height;
     canvas.getContext('2d').drawImage(lastDraw.canvas, 0, 0);
-    $('battle-zones').replaceChildren(...lastDraw.zones.map(zone => {
-      const button = make('button', 'battle-zone');
-      button.type = 'button'; button.dataset.zone = zone.id;
-      button.style.left = zone.x / canvas.width * 100 + '%'; button.style.top = (zone.y + zone.headerHeight) / canvas.height * 100 + '%';
-      button.style.width = zone.w / canvas.width * 100 + '%'; button.style.height = (zone.h - zone.headerHeight) / canvas.height * 100 + '%';
-      button.setAttribute('aria-label', zone.name + ', ' + zone.names.length + ' assigned');
-      button.title = zone.name + (zone.names.length ? ': ' + zone.names.join(', ') : ' · Drop names here');
-      button.classList.toggle('active', zone.id === selectedZone);
-      button.classList.toggle('crowded', lastDraw.overflow.some(item => item.id === zone.id));
-      if (!zone.names.length) button.append(make('span', 'zone-placeholder', '+ Names'));
-      button.addEventListener('click', () => {
-        if (selectedPlayer) assign(selectedPlayer, zone.id);
-        else { selectedZone = zone.id; renderTeam(); announce(zone.name + ' · ' + zone.names.length + ' assigned. Team shown below the map.'); }
-      });
-      return button;
-    }));
+    $('battle-zones').replaceChildren(...lastDraw.zones.map(zone => zoneControl(zone, canvas, snapshot)));
+    for (const zone of $('battle-zones').children) {
+      const list = zone.querySelector('.battle-zone-players');
+      if (list) list.scrollTop = zoneScroll.get(zone.dataset.zone) ?? 0;
+    }
+    if (focusZone && document.activeElement === document.body) {
+      const zone = [...$('battle-zones').children].find(node => node.dataset.zone === focusZone);
+      const buttons = [...(zone?.querySelectorAll('.' + focusClass) ?? [])];
+      const next = buttons.find(button => button.dataset.playerId === focused.dataset.playerId) ?? buttons[Math.min(focusIndex, buttons.length - 1)] ?? zone?.querySelector('.battle-zone-target');
+      next?.focus({ preventScroll: true });
+    }
     $('battle-overflow').hidden = !lastDraw.overflow.length;
     $('battle-overflow-text').textContent = 'Names need more room in ' + lastDraw.overflow.map(zone => zone.name).join(', ') + '. Move some players to another zone before exporting.';
     $('battle-export').disabled = !lastDraw.assigned || Boolean(lastDraw.overflow.length);

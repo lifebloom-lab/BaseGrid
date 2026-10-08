@@ -164,6 +164,30 @@ test('wrapping preserves complete long names and Unicode graphemes', () => {
   }
 });
 
+test('warehouse preview keeps the reported player names whole instead of squeezing them into four columns', () => {
+  const names = ['JOE FIXIT', 'LGIUGO', 'Cocodrilomingo', 'Matistr'];
+  const players = names.map((name, id) => ({ id: String(id), name }));
+  const plan = { ...emptyBattle(), players, assignments: { 'warehouse-1': players.map(player => player.id) } };
+  const measure = (text, size) => [...text].length * size * .55;
+  const card = layoutBattleZones(BATTLE_MAPS.canyon, plan, 2842, 2214, measure).find(zone => zone.id === 'warehouse-1');
+  assert.equal(card.text.overflow, false);
+  assert.equal(card.text.columns, 2);
+  assert.deepEqual(card.text.items.map(item => item.lines), names.map(name => [name]));
+  for (const item of card.text.items) assert.ok(measure(item.name, card.text.fontSize) <= item.width);
+  const smaller = layoutNames(names, 520, 100, measure, { maxColumns: 4 });
+  assert.equal(smaller.overflow, false);
+  assert.ok(smaller.fontSize < 38 && smaller.fontSize >= 24);
+  assert.deepEqual(smaller.items.map(item => item.lines), names.map(name => [name]));
+});
+
+test('when a complete name cannot fit, wrapping uses spaces before breaking words', () => {
+  const name = 'The Northern Alliance Commander';
+  const fitted = layoutNames([name], 260, 200, (text, size) => text.length * size * .55);
+  assert.equal(fitted.overflow, false);
+  assert.ok(fitted.items[0].lines.length > 1);
+  assert.equal(fitted.items[0].lines.join(' '), name);
+});
+
 test('Desert cards grow and shrink with teams, preserve assignment order, and stop before other cards', () => {
   const map = BATTLE_MAPS.desert;
   const measure = (text, size) => [...text].length * size * .55;

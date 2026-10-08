@@ -58,7 +58,7 @@ function drawDesertTitle(ctx, width, height) {
   ctx.restore();
 }
 
-export function drawBattle(map, plan, image) {
+export function drawBattle(map, plan, image, { editing = false } = {}) {
   const width = image.naturalWidth;
   const height = image.naturalHeight;
   const canvas = document.createElement('canvas');
@@ -87,10 +87,14 @@ export function drawBattle(map, plan, image) {
   if (map.id === 'desert') drawDesertTitle(ctx, width, height);
   for (const zone of zones) {
     if (!zone.card && !zone.names.length) continue;
-    ctx.fillStyle = zone.card ? '#fffdf8' : '#fffffff2';
-    ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+    if (editing && !zone.card) {
+      ctx.fillStyle = '#fffffff2';
+      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+    }
     if (zone.card) {
       // Replace the original fixed label with a header and an expanding body.
+      ctx.fillStyle = '#fffdf8';
+      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
       ctx.fillStyle = zone.card.color;
       ctx.fillRect(zone.x, zone.y, zone.w, zone.headerHeight);
       ctx.fillStyle = '#fff';
@@ -99,6 +103,8 @@ export function drawBattle(map, plan, image) {
       ctx.strokeStyle = '#46322180'; ctx.lineWidth = 2;
       ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
     }
+    // The editor overlays interactive name capsules; exports draw names only.
+    if (editing) continue;
     const textX = zone.x + zone.padding;
     const textY = zone.y + zone.headerHeight + zone.padding;
     ctx.fillStyle = '#142b23';

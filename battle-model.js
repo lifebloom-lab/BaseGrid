@@ -139,13 +139,15 @@ export function reorderBattlePlayer(plan, zoneId, playerId, direction) {
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-function wrapName(name, width, font, measure) {
+function wrapName(name, width, font, measure, wrapping) {
+  if (wrapping === 'none') return measure(name, font) <= width ? [name] : null;
   const lines = [];
   let line = '';
   for (const word of name.trim().split(/\s+/u)) {
     const next = line ? line + ' ' + word : word;
     if (measure(next, font) <= width) { line = next; continue; }
     if (line) { lines.push(line); line = ''; }
+    if (wrapping === 'words' && measure(word, font) > width) return null;
     for (const { segment } of graphemes.segment(word)) {
       if (measure(segment, font) > width) return null;
       if (line && measure(line + segment, font) > width) { lines.push(line); line = ''; }
@@ -156,51 +158,53 @@ function wrapName(name, width, font, measure) {
   return lines;
 }
 
-// Prefer readable type and two columns for larger teams. Each item retains its
-// complete name; wrapped lines never split a combining character or emoji.
+// Try all usable column counts and font sizes with whole names first, then wrap
+// at spaces. Breaking a long word is a last resort and keeps graphemes intact.
 export function layoutNames(names, width, maxHeight, measure, { maxFont = 38, minFont = 24, minHeight = 0, maxColumns = 2 } = {}) {
   if (!names.length) return { fontSize: maxFont, columns: 1, lineHeight: maxFont * 1.24, height: minHeight, items: [], rowDividers: [], overflow: false };
   const gap = 22;
   let requiredHeight = Infinity;
-  for (let step = 0; step <= Math.ceil((maxFont - minFont) / 2); step++) {
-    const font = Math.max(minFont, maxFont - step * 2);
-    const candidates = [];
-    for (let columns = 1; columns <= Math.min(maxColumns, names.length); columns++) {
-      const cellWidth = (width - gap * (columns - 1)) / columns;
-      if (cellWidth < font * 3) continue;
-      const wrapped = names.map(name => wrapName(name, cellWidth, font, measure));
-      if (wrapped.some(lines => !lines)) continue;
-      const lineHeight = font * 1.24;
-      const rowGap = font * .2;
-      const items = [];
-      const rowDividers = [];
-      let height = 0;
-      for (let start = 0; start < names.length; start += columns) {
-        if (start) { rowDividers.push(height + rowGap / 2); height += rowGap; }
-        const rowHeight = Math.max(...wrapped.slice(start, start + columns).map(lines => lines.length)) * lineHeight;
-        for (let column = 0; column < columns && start + column < names.length; column++) {
-          const index = start + column;
-          items.push({ name: names[index], lines: wrapped[index], width: cellWidth,
-            x: column * (cellWidth + gap) + cellWidth / 2,
-            y: height + lineHeight / 2, height: wrapped[index].length * lineHeight });
+  for (const wrapping of ['none', 'words', 'graphemes']) {
+    for (let step = 0; step <= Math.ceil((maxFont - minFont) / 2); step++) {
+      const font = Math.max(minFont, maxFont - step * 2);
+      const candidates = [];
+      for (let columns = 1; columns <= Math.min(maxColumns, names.length); columns++) {
+        const cellWidth = (width - gap * (columns - 1)) / columns;
+        if (cellWidth < font * 3) continue;
+        const wrapped = names.map(name => wrapName(name, cellWidth, font, measure, wrapping));
+        if (wrapped.some(lines => !lines)) continue;
+        const lineHeight = font * 1.24;
+        const rowGap = font * .2;
+        const items = [];
+        const rowDividers = [];
+        let height = 0;
+        for (let start = 0; start < names.length; start += columns) {
+          if (start) { rowDividers.push(height + rowGap / 2); height += rowGap; }
+          const rowHeight = Math.max(...wrapped.slice(start, start + columns).map(lines => lines.length)) * lineHeight;
+          for (let column = 0; column < columns && start + column < names.length; column++) {
+            const index = start + column;
+            items.push({ name: names[index], lines: wrapped[index], width: cellWidth,
+              x: column * (cellWidth + gap) + cellWidth / 2,
+              y: height + lineHeight / 2, height: wrapped[index].length * lineHeight });
+          }
+          height += rowHeight;
         }
-        height += rowHeight;
+        requiredHeight = Math.min(requiredHeight, height);
+        if (height > maxHeight) continue;
+        // Once type needs to shrink, the card has reached its available height.
+        // Keep that space as names reflow instead of making the card jump in size.
+        const fittedHeight = font < maxFont ? maxHeight : Math.max(height, minHeight);
+        const offset = (fittedHeight - height) / 2;
+        candidates.push({ fontSize: font, columns, lineHeight, height: fittedHeight, contentHeight: height,
+          items: items.map(item => ({ ...item, y: item.y + offset })),
+          rowDividers: rowDividers.map(y => y + offset), overflow: false });
       }
-      requiredHeight = Math.min(requiredHeight, height);
-      if (height > maxHeight) continue;
-      // Once type needs to shrink, the card has reached its available height.
-      // Keep that space as names reflow instead of making the card jump in size.
-      const fittedHeight = font < maxFont ? maxHeight : Math.max(height, minHeight);
-      const offset = (fittedHeight - height) / 2;
-      candidates.push({ fontSize: font, columns, lineHeight, height: fittedHeight, contentHeight: height,
-        items: items.map(item => ({ ...item, y: item.y + offset })),
-        rowDividers: rowDividers.map(y => y + offset), overflow: false });
-    }
-    if (candidates.length) {
-      // Small teams use a full-width list when possible; larger teams favor the
-      // shorter layout, so cards grow only as much as their contents need.
-      if (names.length < 4 && candidates[0].columns === 1) return candidates[0];
-      return candidates.sort((a, b) => a.contentHeight - b.contentHeight || a.columns - b.columns)[0];
+      if (candidates.length) {
+        // Small teams use a full-width list when possible; larger teams favor the
+        // shorter layout, so cards grow only as much as their contents need.
+        if (names.length < 4 && candidates[0].columns === 1) return candidates[0];
+        return candidates.sort((a, b) => a.contentHeight - b.contentHeight || a.columns - b.columns)[0];
+      }
     }
   }
   return { fontSize: minFont, columns: maxColumns, height: maxHeight, items: [], rowDividers: [], overflow: true, requiredHeight };
