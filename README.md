@@ -73,6 +73,17 @@ API contract: [LastWarTools documentation](https://api.lastwar.tools/docs) and [
 
 Drafts, actions, and the roster library are saved automatically in this browser's localStorage. They stay on the same device/browser/origin; they do not sync between your computer and phone. Always use the same address (for example, `http://127.0.0.1:8000`); `localhost`, a different port, and `file://` do not share its storage. If storage is unavailable or full, a notice explains that the current plan may not survive refresh. Clearing browser data removes both the plan and the roster library. Only one plan per browser origin is supported; use one tab to avoid overwriting another tab's work.
 
+## Hidden Battle planner preview
+
+Open `/battle.html` at the same address as BaseGrid (locally, <http://127.0.0.1:8000/battle.html>). This experimental page has no link in the main planner. It uses the supplied Canyon Storm and Desert Storm images as fixed templates; their original building labels remain unchanged.
+
+1. Choose a map, then **Use BaseGrid roster** or **Add names**. Copying the current roster preserves HQ, rank, and power and uses no API calls. Both player lists show available power in a compact format (for example, **Power 123.5M**); hover to see the full number. Existing battle drafts recover missing power from saved rosters by player ID. Players are ordered by rank, then HQ, when available.
+2. Drag a player into a building's name area, or select a player and then a zone. On phones, tap to assign or drag the dotted handle; swipe to explore the map. The **Selected zone** menu is also available for keyboard or touch assignment.
+3. Select a zone to review its team below the map. Move players between zones, use **×** or drop back into the pool to unassign, and use the arrows to reorder names. Each player belongs to one zone per map. **Undo** reverses recent changes during the current visit.
+4. **Preview & export PNG** creates a full-resolution image with player names directly on the map. Crowded name areas ask you to move players to another zone before exporting so names are not omitted. Unassigned players are counted in the preview but are not included in the image.
+
+Each map autosaves its own roster, title, and assignments under `basegrid.battles.v1`. The formation and import library are only read, never written by this page. Returning to BaseGrid or clearing battle assignments leaves those records intact. Use the same browser/address to access the current roster and saved battle drafts. Battle planning and image export work locally, without an API, account, or additional service.
+
 ## Files
 
 ```text
@@ -88,6 +99,11 @@ import-ui.js              Import dialog, request cancellation, roster review
 roster-cache.js           Local roster/search library; explicit refresh only
 reorder-ui.js             Mouse/touch dragging and accessible keyboard reordering
 map-zoom.js               Map scale, adaptive detail, fit, and anchored zoom
+battle.html / battle.css  Hidden battle assignment preview and responsive interface
+battle-model.js           Independent battle drafts, assignments, and name fitting
+battle-ui.js              Roster copying, drag/tap assignment, undo, and PNG preview
+battle-render.js          Shared map rendering and full-resolution PNG output
+battle-*.png              Original Canyon Storm and Desert Storm templates
 grid-layout.js           Unit grid, footprint collisions, obstacle sizes, and canvas bounds
 free-formation.js         Legacy coarse-slot layout support for saved-plan migration
 placement-messages.js     Translated placement messages, language preference, and copying
@@ -159,7 +175,7 @@ The repository is ready for a **Worker with Static Assets**. It hosts the planne
 
 Use Workers, including the Worker script, so `/api/lastwar/…` is available. A static-only upload or GitHub Pages cannot run the import relay. Cloudflare installs the pinned deployment tool from this repository. The explicit build command is needed for the dashboard build pipeline; `wrangler.jsonc` also runs the build for local Wrangler commands.
 
-The build copies only the 16 public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
+The build copies only the explicitly listed public app files into `dist/`. Python code, tests, Git files, and environment files are excluded. API responses are never cached; the relay only forwards the two supported GET routes to `https://api.lastwar.tools`, refuses redirects, bounds provider responses to 2 MiB, and times out after 90 seconds. It uses the key entered by the visitor for that request only. Persistent Worker logs are disabled in the configuration, and the relay never logs request headers or bodies.
 
 Saved plans and rosters remain in the visitor's browser. The Cloudflare address has its own storage: existing localhost data does not automatically move to the hosted app. Use the same hosted address consistently to reuse its saved rosters without calling the API again.
 

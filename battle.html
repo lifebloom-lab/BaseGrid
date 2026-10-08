@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
+  <title>Battle planner · BaseGrid Labs</title>
+  <link rel="stylesheet" href="./styles.css?v=20261008-search">
+  <link rel="stylesheet" href="./battle.css?v=1">
+  <script type="module" src="./battle-ui.js?v=1"></script>
+</head>
+<body class="battle-app">
+  <header class="battle-header"><div><a href="./">‹ BaseGrid</a><span class="lab-badge">LABS · PREVIEW</span></div><p id="battle-save" role="status">Saved on this device</p></header>
+  <main class="battle-main">
+    <div class="battle-heading"><div><p class="eyebrow">A PLACE FOR EVERY PLAYER</p><h1>Battle planner<span>.</span></h1><p class="field-help">Assign your teams, then share the plan as an image.</p></div><button id="battle-export" class="button primary" type="button" disabled>Preview &amp; export PNG</button></div>
+    <p id="battle-error" class="error" role="alert" hidden></p>
+    <div class="battle-layout">
+      <aside class="battle-sidebar">
+        <section class="panel battle-settings" aria-label="Battle settings">
+          <label for="battle-map">Battle map</label>
+          <div class="battle-select"><select id="battle-map"><option value="canyon">Canyon Storm</option><option value="desert">Desert Storm</option></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <label for="battle-title">Plan title <span class="optional">Optional</span></label><input id="battle-title" maxlength="100" placeholder="Team A" autocomplete="off">
+        </section>
+        <section id="battle-pool" class="panel battle-roster" aria-labelledby="battle-roster-title">
+          <div class="battle-section-heading"><h2 id="battle-roster-title">Players</h2><span id="battle-player-count"></span></div>
+          <button id="battle-copy-roster" class="button secondary" type="button">Use BaseGrid roster</button>
+          <button id="battle-add-names" class="text-button" type="button">＋ Add names</button>
+          <p id="battle-roster-help" class="field-help">Copy your saved roster or add names manually.</p>
+          <label class="sr-only" for="battle-search">Search battle players</label><input id="battle-search" type="search" placeholder="Search players…" autocomplete="off">
+          <div class="battle-pool-tabs" role="group" aria-label="Player list"><button type="button" id="battle-unassigned-tab" aria-pressed="true">Unassigned <span id="battle-unassigned-count">0</span></button><button type="button" id="battle-all-tab" aria-pressed="false">All players</button></div>
+          <p id="battle-pool-empty" class="field-help"></p><ul id="battle-player-list" class="battle-player-list" aria-label="Battle players"></ul>
+          <p class="field-help">Drag a name onto the map, or select a player and then a zone. Drop back here to unassign.</p>
+        </section>
+      </aside>
+      <section class="battle-board-column" aria-label="Battle assignment board">
+        <div class="panel battle-board">
+          <div class="battle-map-toolbar"><div><h2 id="battle-map-name">Canyon Storm</h2><p id="battle-progress" class="field-help">0 assigned</p></div><div class="battle-board-actions"><button id="battle-undo" class="button secondary" type="button" disabled>Undo</button><button id="battle-zoom" class="button secondary" type="button" aria-pressed="false">Enlarge map</button></div></div>
+          <div id="battle-selection" class="battle-selection" hidden><span id="battle-selection-name"></span><button id="battle-cancel-selection" type="button" class="text-button">Cancel</button></div>
+          <p id="battle-status" class="battle-instructions" role="status" aria-live="polite">Select a zone to view its team.</p>
+          <div id="battle-overflow" class="battle-overflow" role="status" hidden><p id="battle-overflow-text"></p></div>
+          <div id="battle-map-scroll" class="battle-map-scroll" tabindex="0" role="region" aria-label="Battle map; scroll to explore">
+            <div id="battle-map-stage" class="battle-map-stage"><canvas id="battle-canvas" aria-hidden="true"></canvas><div id="battle-zones" class="battle-zones" role="group" aria-label="Assignment zones"></div></div>
+          </div>
+          <div class="battle-board-footer"><span>Separate battle draft · BaseGrid formation stays intact</span><button id="battle-reset" type="button" class="text-button">Clear assignments</button></div>
+        </div>
+        <section class="panel battle-team" aria-labelledby="battle-zone-title">
+          <div class="battle-section-heading"><h2 id="battle-zone-title">Zone team</h2><span id="battle-zone-count"></span></div>
+          <label class="sr-only" for="battle-zone-select">Selected zone</label>
+          <div class="battle-select"><select id="battle-zone-select"></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <p id="battle-team-help" class="field-help">Select players and drop them on a zone.</p>
+          <ul id="battle-team-list" class="battle-team-list" aria-label="Players assigned to this zone"></ul>
+        </section>
+      </section>
+    </div>
+  </main>
+  <dialog id="battle-names-dialog" class="battle-dialog" aria-labelledby="battle-names-title"><form id="battle-names-form"><h2 id="battle-names-title">Add players</h2><label for="battle-names">Player names</label><textarea id="battle-names" rows="7" placeholder="One name per line" required></textarea><p class="field-help">Names are added to this battle’s roster.</p><div class="battle-dialog-actions"><button id="battle-names-cancel" class="button secondary" type="button">Cancel</button><button class="button primary" type="submit">Add players</button></div></form></dialog>
+  <dialog id="battle-reset-dialog" class="battle-dialog" aria-labelledby="battle-reset-title"><form method="dialog"><h2 id="battle-reset-title">Clear this map’s assignments?</h2><p>Players return to the pool. Your other battle map and BaseGrid formation stay as they are.</p><div class="battle-dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button value="clear" class="button primary">Clear assignments</button></div></form></dialog>
+  <dialog id="battle-export-dialog" class="battle-export-dialog" aria-labelledby="battle-export-title"><div class="battle-export-heading"><div><h2 id="battle-export-title">Your battle plan</h2><p id="battle-export-summary" class="field-help"></p></div><button id="battle-export-close" class="button secondary" type="button">Back to editing</button></div><img id="battle-export-image" alt="Preview of the battle plan PNG"><div class="battle-dialog-actions"><a id="battle-download" class="button primary" download>Download PNG</a></div></dialog>
+</body>
+</html>
