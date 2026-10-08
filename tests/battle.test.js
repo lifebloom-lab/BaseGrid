@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BATTLE_KEY, BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames } from '../battle-model.js';
+import { BATTLE_KEY, BATTLE_MAPS, emptyBattle, loadBattles, saveBattles, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
   { id: 'lastwar:1', name: 'Same', hqLevel: 35, group: 5, power: 123456789, apiKey: 'never-copy' },
@@ -139,12 +139,69 @@ test('name layout retains every complete name within the available bounds, or re
   assert.equal(fitted.overflow, false);
   assert.deepEqual(fitted.items.map(item => item.name), names);
   for (const item of fitted.items) {
-    const half = measure(item.name, fitted.fontSize) / 2;
-    assert.ok(item.x - half >= 0 && item.x + half <= 520);
-    assert.ok(item.y > 0 && item.y < 100);
+    for (const line of item.lines) {
+      const half = measure(line, fitted.fontSize) / 2;
+      assert.ok(item.x - half >= 0 && item.x + half <= 520);
+    }
+    assert.ok(item.y - fitted.lineHeight / 2 >= 0);
+    assert.ok(item.y + item.height - fitted.lineHeight / 2 <= fitted.height);
   }
   assert.equal(layoutNames(['Very long name '.repeat(20)], 500, 70, measure).overflow, true);
   assert.equal(layoutNames(Array.from({ length: 30 }, () => 'Player'), 500, 70, measure).overflow, true);
+});
+
+test('wrapping preserves complete long names and Unicode graphemes', () => {
+  const segments = text => [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map(part => part.segment);
+  const measure = (text, size) => segments(text).length * size * .6;
+  const names = ['Alexandra of the Northern Alliance', '별빛수호자'.repeat(3), 'e\u0301👩‍🚀'.repeat(8)];
+  for (const name of names) {
+    const fitted = layoutNames([name], 180, 350, measure);
+    assert.equal(fitted.overflow, false);
+    assert.ok(fitted.items[0].lines.length > 1);
+    assert.equal(fitted.items[0].lines.join('').replaceAll(' ', ''), name.replaceAll(' ', ''));
+    assert.deepEqual(fitted.items[0].lines.flatMap(segments).filter(value => value !== ' '), segments(name).filter(value => value !== ' '));
+    for (const line of fitted.items[0].lines) assert.ok(measure(line, fitted.fontSize) <= 180);
+  }
+});
+
+test('Desert cards grow and shrink with teams, preserve assignment order, and stop before other cards', () => {
+  const map = BATTLE_MAPS.desert;
+  const measure = (text, size) => [...text].length * size * .55;
+  const players = Array.from({ length: 8 }, (_, index) => ({ id: String(index), name: 'Player ' + (index + 1) }));
+  const plan = { ...emptyBattle(), players };
+  const original = layoutBattleZones(map, plan, 2496, 2524, measure);
+  for (const zone of map.zones) {
+    const assigned = { ...plan, assignments: { [zone.id]: players.map(player => player.id) } };
+    const card = layoutBattleZones(map, assigned, 2496, 2524, measure).find(item => item.id === zone.id);
+    const empty = original.find(item => item.id === zone.id);
+    assert.equal(card.text.overflow, false, zone.name);
+    assert.equal(card.text.columns, 2);
+    assert.deepEqual(card.text.items.map(item => item.name), players.map(player => player.name));
+    assert.ok(card.h > empty.h);
+    assert.equal(card.y, empty.y);
+    assert.ok(card.y + card.h <= zone.card.bottom * 2524 + .0001);
+    const removed = assignBattlePlayer(assigned, 'desert', '0', null);
+    const smaller = layoutBattleZones(map, removed, 2496, 2524, measure).find(item => item.id === zone.id);
+    assert.ok(smaller.h <= card.h);
+    for (const other of map.zones.filter(item => item.id !== zone.id)) {
+      const [x, y, w] = zone.rect, [ox, oy, ow] = other.rect;
+      assert.ok(x + w <= ox || ox + ow <= x || zone.card.bottom <= oy || other.card.bottom <= y, zone.id + '/' + other.id);
+    }
+  }
+  assert.deepEqual(plan.assignments, {});
+});
+
+test('wide Canyon panels retain room for a larger team without spilling outside the panel', () => {
+  const players = Array.from({ length: 12 }, (_, index) => ({ id: String(index), name: 'Player ' + (index + 1) }));
+  const plan = { ...emptyBattle(), players, assignments: { 'data-1': players.map(player => player.id) } };
+  const [card] = layoutBattleZones(BATTLE_MAPS.canyon, plan, 2842, 2214, (text, size) => text.length * size * .55);
+  assert.equal(card.text.overflow, false);
+  assert.equal(card.text.items.length, players.length);
+  assert.ok(Math.abs(card.h - card.rect[3] * 2214) < .0001);
+  for (const item of card.text.items) {
+    for (const line of item.lines) assert.ok(line.length * card.text.fontSize * .55 <= item.width);
+    assert.ok(item.y + item.height - card.text.lineHeight / 2 <= card.text.height);
+  }
 });
 
 test('all image zones are unique, normalized, and inside their supplied template', () => {

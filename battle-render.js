@@ -1,4 +1,4 @@
-import { layoutNames } from './battle-model.js';
+import { layoutBattleZones } from './battle-model.js';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const HEADER = 108;
@@ -64,13 +64,7 @@ export function drawBattle(map, plan, image) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const measure = (name, size) => { ctx.font = '600 ' + size + 'px ' + FONT; return ctx.measureText(name).width; };
-  const players = new Map(plan.players.map(player => [player.id, player]));
-  const zones = map.zones.map(zone => {
-    const [x, y, w, h] = zone.rect;
-    const names = (plan.assignments[zone.id] ?? []).map(id => players.get(id)?.name).filter(Boolean);
-    return { ...zone, names, x: x * width, y: y * height + HEADER, w: w * width, h: h * height,
-      text: layoutNames(names, w * width - 12, h * height - 8, measure) };
-  });
+  const zones = layoutBattleZones(map, plan, width, height, measure).map(zone => ({ ...zone, y: zone.y + HEADER }));
   const assigned = zones.reduce((sum, zone) => sum + zone.names.length, 0);
   canvas.width = width;
   canvas.height = height + HEADER;
@@ -92,18 +86,37 @@ export function drawBattle(map, plan, image) {
   ctx.textAlign = 'center';
   if (map.id === 'desert') drawDesertTitle(ctx, width, height);
   for (const zone of zones) {
-    if (!zone.names.length) continue;
-    ctx.fillStyle = '#fffffff2';
+    if (!zone.card && !zone.names.length) continue;
+    ctx.fillStyle = zone.card ? '#fffdf8' : '#fffffff2';
     ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+    if (zone.card) {
+      // Replace the original fixed label with a header and an expanding body.
+      ctx.fillStyle = zone.card.color;
+      ctx.fillRect(zone.x, zone.y, zone.w, zone.headerHeight);
+      ctx.fillStyle = '#fff';
+      ctx.font = '750 ' + 30 * width / 2496 + 'px ' + FONT;
+      ctx.fillText(zone.card.label, zone.x + zone.w / 2, zone.y + zone.headerHeight / 2, zone.w - zone.padding * 2);
+      ctx.strokeStyle = '#46322180'; ctx.lineWidth = 2;
+      ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+    }
+    const textX = zone.x + zone.padding;
+    const textY = zone.y + zone.headerHeight + zone.padding;
     ctx.fillStyle = '#142b23';
     if (zone.text.overflow) {
       const text = 'Names need more room';
       ctx.fillStyle = '#9b302d';
       ctx.font = '700 34px ' + FONT;
-      ctx.fillText(text, zone.x + zone.w / 2, zone.y + zone.h / 2, zone.w - 12);
+      ctx.fillText(text, zone.x + zone.w / 2, zone.y + (zone.h + zone.headerHeight) / 2, zone.w - zone.padding * 2);
     } else {
+      ctx.strokeStyle = '#142b231a'; ctx.lineWidth = 1;
+      for (const y of zone.text.rowDividers) {
+        ctx.beginPath(); ctx.moveTo(textX, textY + y);
+        ctx.lineTo(zone.x + zone.w - zone.padding, textY + y); ctx.stroke();
+      }
       ctx.font = '600 ' + zone.text.fontSize + 'px ' + FONT;
-      for (const item of zone.text.items) ctx.fillText(item.name, zone.x + 6 + item.x, zone.y + 4 + item.y);
+      for (const item of zone.text.items) {
+        item.lines.forEach((line, index) => ctx.fillText(line, textX + item.x, textY + item.y + index * zone.text.lineHeight));
+      }
     }
   }
   return { canvas, zones, assigned, imageWidth: width, imageHeight: height + HEADER,

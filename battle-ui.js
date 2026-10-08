@@ -220,8 +220,8 @@ async function renderMap() {
     $('battle-zones').replaceChildren(...lastDraw.zones.map(zone => {
       const button = make('button', 'battle-zone');
       button.type = 'button'; button.dataset.zone = zone.id;
-      button.style.left = zone.x / canvas.width * 100 + '%'; button.style.top = zone.y / canvas.height * 100 + '%';
-      button.style.width = zone.w / canvas.width * 100 + '%'; button.style.height = zone.h / canvas.height * 100 + '%';
+      button.style.left = zone.x / canvas.width * 100 + '%'; button.style.top = (zone.y + zone.headerHeight) / canvas.height * 100 + '%';
+      button.style.width = zone.w / canvas.width * 100 + '%'; button.style.height = (zone.h - zone.headerHeight) / canvas.height * 100 + '%';
       button.setAttribute('aria-label', zone.name + ', ' + zone.names.length + ' assigned');
       button.title = zone.name + (zone.names.length ? ': ' + zone.names.join(', ') : ' · Drop names here');
       button.classList.toggle('active', zone.id === selectedZone);
