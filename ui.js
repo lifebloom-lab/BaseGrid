@@ -1,4 +1,4 @@
-import { parseManualPlayers, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js';
+import { parseManualPlayers, playersFromDraft, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js';
 import { tileKey } from './free-formation.js';
 import { gridCanvas, previewGridMove } from './grid-layout.js';
 import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './storage.js';
@@ -18,6 +18,7 @@ let mapPadding = 1;
 let resetKind = 'clear';
 let poolPlayerId = null;
 let imported = null;
+let locatedPlayerId = null;
 const mapZoom = setupMapZoom({ map: byId('map-scroll'), grid: byId('formation-grid'), controls: byId('map-zoom-controls'),
   beforeZoom: () => reorder?.cancel('Placement cancelled. Choose a tool to start again.') });
 const autoPlaceDialog = byId('auto-place-dialog');
@@ -292,6 +293,85 @@ function renderPlayerDetails(player, container = element('span', 'player-details
   }
   return container;
 }
+
+const searchText = value => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+
+function highlightLocatedPlayer() {
+  for (const cell of byId('formation-grid').querySelectorAll('.slot')) {
+    cell.classList.toggle('search-located', cell.dataset.playerId === locatedPlayerId);
+  }
+}
+
+function locatePlayer(playerId) {
+  if (!currentPlan) return;
+  reorder?.cancel();
+  const cell = [...byId('formation-grid').children].find(node => node.dataset.playerId === playerId);
+  locatedPlayerId = cell ? playerId : null;
+  highlightLocatedPlayer();
+  if (cell) {
+    mapZoom.zoomTo(cell);
+    byId('map-scroll').scrollIntoView({ block: 'center', inline: 'nearest' });
+    byId('reorder-status').textContent = `Located ${cell.querySelector('.slot-name').textContent} at X ${cell.dataset.x}, Y ${cell.dataset.y}.`;
+  } else if (currentPlan.pool.some(player => player.id === playerId)) {
+    poolPlayerId = playerId;
+    byId('pool-player').value = playerId;
+    syncPoolTool();
+    byId('base-pool').scrollIntoView({ block: 'center', inline: 'nearest' });
+    byId('add-base').focus({ preventScroll: true });
+    byId('reorder-status').textContent = `${currentPlan.pool.find(player => player.id === playerId).name} is in the base pool. Use Add base to place them.`;
+  }
+}
+
+function renderPlayerSearch() {
+  const players = currentPlan?.players ?? playersFromDraft(draft);
+  const input = byId('player-search-input');
+  byId('player-search').hidden = !players.length;
+  if (!players.length) input.value = '';
+  if (!players.some(player => player.id === locatedPlayerId)) locatedPlayerId = null;
+  const query = searchText(input.value);
+  const matches = query ? sortPoolPlayers(players).filter(player => searchText(player.name).includes(query)) : [];
+  const slots = new Map(currentPlan?.slots.filter(slot => slot.playerId).map(slot => [slot.playerId, slot]));
+  const results = byId('player-search-results');
+  results.replaceChildren();
+  results.hidden = !matches.length;
+  byId('clear-player-search').hidden = !input.value;
+  byId('player-search-status').textContent = !query ? 'Type a name, then select a player to locate them.'
+    : !matches.length ? 'No players found.' : `${matches.length} ${matches.length === 1 ? 'player found' : 'players found'}`;
+  for (const player of matches) {
+    const slot = slots.get(player.id);
+    const row = element('li');
+    const button = element('button', 'player-search-result');
+    button.type = 'button';
+    button.disabled = !currentPlan;
+    button.setAttribute('aria-label', `${slot ? 'Find' : 'Select'} ${player.name}${slot ? ` on map, X ${slot.x}, Y ${slot.y}` : ' in base pool'}`);
+    button.append(element('span', 'player-search-name', player.name), renderPlayerDetails(player));
+    const status = { planned: 'Planned', 'in-progress': 'In progress', placed: 'Placed' }[slot?.status];
+    button.append(element('span', 'player-search-location', !currentPlan ? 'Check starting coordinates'
+      : slot ? `${status} · X ${slot.x}, Y ${slot.y}` : 'In base pool'));
+    button.addEventListener('click', () => locatePlayer(player.id));
+    row.append(button);
+    results.append(row);
+  }
+  highlightLocatedPlayer();
+}
+
+byId('player-search-input').addEventListener('input', () => {
+  locatedPlayerId = null;
+  renderPlayerSearch();
+});
+byId('clear-player-search').addEventListener('click', () => {
+  byId('player-search-input').value = '';
+  locatedPlayerId = null;
+  renderPlayerSearch();
+  byId('player-search-input').focus();
+});
+byId('player-search-input').addEventListener('keydown', event => {
+  if (event.key === 'Escape') { event.preventDefault(); byId('clear-player-search').click(); }
+  if (event.key === 'Enter' && !event.isComposing) {
+    event.preventDefault();
+    byId('player-search-results').querySelector('button:not(:disabled)')?.click();
+  }
+});
 
 function change(update, focusId) {
   try {
@@ -572,6 +652,7 @@ function render() {
     ? `${spacing} empty ${spacing === 1 ? 'tile' : 'tiles'} between bases when using Auto place. Dragging moves 1 tile at a time.`
     : 'Spacing is the number of empty tiles between bases.';
   renderFormation(plan);
+  renderPlayerSearch();
   byId('mobile-map-progress').textContent = `${placed}/${total} placed`;
   byId('mobile-map-progress').setAttribute('aria-label', `${placed} of ${total} placed. View progress and map tools`);
   byId('mobile-pool-count').textContent = `· ${plan?.pool.length ?? 0}`;
@@ -583,6 +664,7 @@ function render() {
 
 byId('setup-form').addEventListener('submit', event => event.preventDefault());
 byId('setup-form').addEventListener('input', event => {
+  if (!Object.values(fields).includes(event.target)) return;
   const patch = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, input.value]));
   if (event.target === fields.names) patch.setupMethod = 'manual';
   if (!change(value => updateTileDraft(value, patch))) syncFields();

@@ -7,8 +7,8 @@
   <meta name="description" content="Plan aligned Last War alliance bases, work around obstacles, and keep every player's coordinates in one place.">
   <title>BaseGrid · Alliance planner</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310191c'/%3E%3Cpath fill='%2395e5bf' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6z'/%3E%3Cpath fill='%23d6a970' d='M18 18h8v8h-8z'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./styles.css?v=20261004-zoom">
-  <script type="module" src="./ui.js?v=20261004-zoom"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261008-search">
+  <script type="module" src="./ui.js?v=20261008-search"></script>
 </head>
 <body>
   <header class="site-header">
@@ -51,6 +51,12 @@
             <div class="label-line"><label for="players">Player names</label><span id="player-count">0 players</span></div>
             <textarea id="players" name="players" rows="6" placeholder="Enter player names, one per line…" aria-describedby="players-help" required></textarea>
             <p id="players-help" class="field-help">One name per line. New players join the base pool.</p>
+            <div id="player-search" class="player-search" hidden>
+              <label for="player-search-input">Find a player</label>
+              <div class="player-search-field"><input id="player-search-input" type="search" placeholder="Search names…" autocomplete="off" spellcheck="false" aria-describedby="player-search-status" aria-controls="player-search-results"><button id="clear-player-search" type="button" aria-label="Clear player search" hidden>×</button></div>
+              <p id="player-search-status" class="field-help" role="status" aria-live="polite" aria-atomic="true">Type a name, then select a player to locate them.</p>
+              <ul id="player-search-results" class="player-search-results" aria-label="Matching players" hidden></ul>
+            </div>
             <div class="section-label coordinates-label"><span>02</span> THE STARTING POINT</div>
             <div class="coordinate-inputs">
               <div><label for="initial-x">Initial X</label><input id="initial-x" name="x" type="number" step="1" value="412" aria-describedby="coordinate-help" required></div>
