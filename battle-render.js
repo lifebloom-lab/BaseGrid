@@ -1,4 +1,4 @@
-import { layoutBattleZones } from './battle-model.js';
+import { battleCounts, layoutBattleZones } from './battle-model.js';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const HEADER = 108;
@@ -65,7 +65,7 @@ export function drawBattle(map, plan, image, { editing = false } = {}) {
   const ctx = canvas.getContext('2d');
   const measure = (name, size) => { ctx.font = '600 ' + size + 'px ' + FONT; return ctx.measureText(name).width; };
   const zones = layoutBattleZones(map, plan, width, height, measure).map(zone => ({ ...zone, y: zone.y + HEADER }));
-  const assigned = zones.reduce((sum, zone) => sum + zone.names.length, 0);
+  const counts = battleCounts(plan);
   canvas.width = width;
   canvas.height = height + HEADER;
   ctx.fillStyle = '#152326';
@@ -82,7 +82,7 @@ export function drawBattle(map, plan, image, { editing = false } = {}) {
   ctx.font = '500 28px ' + FONT;
   ctx.textAlign = 'right';
   ctx.fillStyle = '#b0c7c0';
-  ctx.fillText(assigned + ' / ' + plan.players.length + ' assigned · BaseGrid', width - 32, HEADER / 2);
+  ctx.fillText(plan.players.length ? counts.assigned + ' / ' + plan.players.length + ' assigned · BaseGrid' : counts.alliesZones ? 'Allies · BaseGrid' : 'BaseGrid', width - 32, HEADER / 2);
   ctx.textAlign = 'center';
   if (map.id === 'desert') drawDesertTitle(ctx, width, height);
   for (const zone of zones) {
@@ -121,6 +121,6 @@ export function drawBattle(map, plan, image, { editing = false } = {}) {
       }
     }
   }
-  return { canvas, zones, assigned, imageWidth: width, imageHeight: height + HEADER,
+  return { canvas, zones, ...counts, imageWidth: width, imageHeight: height + HEADER,
     overflow: zones.filter(zone => zone.text.overflow) };
 }

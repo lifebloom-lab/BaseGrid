@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
+import { ALLIES, battlePlayer, battleCounts, playerZones, BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
   { id: 'lastwar:1', name: 'Same', hqLevel: 35, group: 5, power: 123456789, apiKey: 'never-copy' },
@@ -26,15 +26,15 @@ test('battle roster snapshots preserve duplicate identities, retain rank/HQ/powe
   assert.equal(roster[0].hqLevel, 35);
 });
 
-test('assignment moves only the chosen identity, never duplicates a player across zones, and unassign keeps metadata', () => {
+test('moving a capsule changes only the chosen identity and unassign keeps metadata', () => {
   const first = assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power');
   const second = assignBattlePlayer(first, 'canyon', 'lastwar:2', 'power');
-  const moved = assignBattlePlayer(second, 'canyon', 'lastwar:1', 'virus');
+  const moved = assignBattlePlayer(second, 'canyon', 'lastwar:1', 'virus', 'power');
   assert.deepEqual(moved.assignments.power, ['lastwar:2']);
   assert.deepEqual(moved.assignments.virus, ['lastwar:1']);
   assert.deepEqual(first.assignments.power, ['lastwar:1']);
   assert.equal(assignBattlePlayer(moved, 'canyon', 'lastwar:1', 'virus'), moved);
-  const unassigned = assignBattlePlayer(moved, 'canyon', 'lastwar:1', null);
+  const unassigned = assignBattlePlayer(moved, 'canyon', 'lastwar:1', null, 'virus');
   assert.equal(playerZone(unassigned, 'lastwar:1'), null);
   assert.deepEqual(unassigned.players, moved.players);
   assert.throws(() => assignBattlePlayer(first, 'desert', 'lastwar:1', 'power'));
@@ -208,9 +208,82 @@ test('old battle drafts recover missing power by imported ID, without replacing 
 
 test('invalid saved assignments are rejected instead of attaching names to the wrong players', () => {
   assert.throws(() => normalizeBattle({ ...fresh(), assignments: { power: ['missing'] } }, 'canyon'));
-  assert.throws(() => normalizeBattle({ ...fresh(), assignments: { power: ['lastwar:1'], virus: ['lastwar:1'] } }, 'canyon'));
+  assert.throws(() => normalizeBattle({ ...fresh(), assignments: { power: ['lastwar:1', 'lastwar:1'] } }, 'canyon'));
   assert.throws(() => normalizeBattle({ ...fresh(), players: [roster[0], roster[0]] }, 'canyon'));
   assert.throws(() => loadBattles({ getItem: () => '{bad json' }));
+});
+
+test('players can cover several zones; adding, moving and removing preserve the other occurrences', () => {
+  let plan = assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power');
+  plan = assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'virus');
+  plan = assignBattlePlayer(plan, 'canyon', 'lastwar:2', 'power');
+  const before = structuredClone(plan);
+  assert.deepEqual(playerZones(plan, 'lastwar:1'), ['power', 'virus']);
+  assert.equal(assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'virus'), plan, 'no duplicate within a zone');
+  assert.equal(assignBattlePlayer(plan, 'canyon', 'lastwar:1', null), plan, 'dropping a roster row back on the pool does nothing');
+  assert.equal(assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'power', 'power'), plan);
+  assert.equal(assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'data-1', 'warehouse-1'), plan, 'ignore a stale source');
+  assert.throws(() => assignBattlePlayer(plan, 'canyon', 'lastwar:1', null, 'silo'));
+  const moved = assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'data-1', 'power');
+  assert.deepEqual(moved.assignments.power, ['lastwar:2']);
+  assert.deepEqual(moved.assignments.virus, ['lastwar:1']);
+  assert.deepEqual(moved.assignments['data-1'], ['lastwar:1']);
+  const removed = assignBattlePlayer(moved, 'canyon', 'lastwar:1', null, 'data-1');
+  assert.deepEqual(playerZones(removed, 'lastwar:1'), ['virus']);
+  assert.deepEqual(removed.players, plan.players);
+  assert.deepEqual(plan, before);
+  const merged = assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'virus', 'power');
+  assert.deepEqual(merged.assignments.virus, ['lastwar:1'], 'moving onto an existing occurrence keeps one');
+  assert.deepEqual(merged.assignments.power, ['lastwar:2']);
+  assert.deepEqual(battleCounts(plan), { assigned: 2, unassigned: 1, placementCount: 3, alliesZones: 0 });
+});
+
+test('Allies is reusable, removable per zone, excluded from roster counts and available without players', () => {
+  let plan = assignBattlePlayer(emptyBattle(), 'canyon', ALLIES.id, 'power');
+  plan = assignBattlePlayer(plan, 'canyon', ALLIES.id, 'virus');
+  assert.equal(battlePlayer(plan, ALLIES.id), ALLIES);
+  assert.deepEqual(plan.players, []);
+  assert.deepEqual(battleCounts(plan), { assigned: 0, unassigned: 0, placementCount: 2, alliesZones: 2 });
+  assert.equal(assignBattlePlayer(plan, 'canyon', ALLIES.id, 'virus'), plan);
+  assert.deepEqual(playerZones(assignBattlePlayer(plan, 'canyon', ALLIES.id, null, 'power'), ALLIES.id), ['virus']);
+  assert.deepEqual(playerZones(assignBattlePlayer(plan, 'canyon', ALLIES.id, 'data-1', 'power'), ALLIES.id), ['virus', 'data-1']);
+  assert.throws(() => normalizeBattle({ ...plan, assignments: { power: [ALLIES.id, ALLIES.id] } }, 'canyon'));
+  assert.throws(() => mergeBattlePlayers(plan, [ALLIES]), 'reserved label is never a roster record');
+  const withNamedPlayer = mergeBattlePlayers(plan, [{ id: 'real:allies', name: 'Allies', power: 100 }]);
+  assert.equal(battlePlayer(withNamedPlayer, 'real:allies').power, 100);
+  assert.deepEqual(battleCounts(withNamedPlayer), { assigned: 0, unassigned: 1, placementCount: 2, alliesZones: 2 });
+});
+
+test('repeated names and Allies persist in both events and duplicate independently between saved plans', () => {
+  const storage = memoryStorage();
+  let state = emptyBattles();
+  for (const mapId of Object.keys(BATTLE_MAPS)) {
+    state = selectBattlePlan(state, mapId);
+    let plan = fresh();
+    for (const zone of BATTLE_MAPS[mapId].zones.slice(0, 2)) {
+      plan = assignBattlePlayer(plan, mapId, 'lastwar:1', zone.id);
+      plan = assignBattlePlayer(plan, mapId, ALLIES.id, zone.id);
+    }
+    state = updateBattlePlan(state, plan);
+    state = createBattlePlan(state, 'Team B', { duplicate: true, id: mapId + '-b' });
+    const firstZone = BATTLE_MAPS[mapId].zones[0].id;
+    state = updateBattlePlan(state, assignBattlePlayer(currentBattle(state), mapId, ALLIES.id, null, firstZone));
+  }
+  saveBattles(storage, state);
+  const restored = loadBattles(storage);
+  assert.deepEqual(restored, state);
+  for (const mapId of Object.keys(BATTLE_MAPS)) {
+    assert.equal(playerZones(restored.plans[mapId][0], ALLIES.id).length, 2);
+    assert.equal(playerZones(currentBattle(restored, mapId), ALLIES.id).length, 1);
+    assert.deepEqual(battleCounts(currentBattle(restored, mapId)), { assigned: 1, unassigned: 2, placementCount: 3, alliesZones: 1 });
+    const updated = mergeBattlePlayers(currentBattle(restored, mapId), [{ ...roster[0], name: 'Renamed', power: 999 }]);
+    const zones = layoutBattleZones(BATTLE_MAPS[mapId], updated, 2842, 2214, (text, size) => text.length * size * .5);
+    assert.deepEqual(zones[0].names, ['Renamed']);
+    assert.deepEqual(zones[1].names, ['Renamed', 'Allies']);
+    const reordered = reorderBattlePlayer(updated, zones[1].id, ALLIES.id, -1);
+    assert.deepEqual(reordered.assignments[zones[1].id], [ALLIES.id, 'lastwar:1']);
+    assert.deepEqual(reordered.assignments[zones[0].id], updated.assignments[zones[0].id]);
+  }
 });
 
 test('team ordering changes only the requested zone and remains immutable', () => {
@@ -294,7 +367,7 @@ test('Desert cards grow and shrink with teams, preserve assignment order, and st
     assert.ok(card.h > empty.h);
     assert.equal(card.y, empty.y);
     assert.ok(card.y + card.h <= zone.card.bottom * 2524 + .0001);
-    const removed = assignBattlePlayer(assigned, 'desert', '0', null);
+    const removed = assignBattlePlayer(assigned, 'desert', '0', null, zone.id);
     const smaller = layoutBattleZones(map, removed, 2496, 2524, measure).find(item => item.id === zone.id);
     assert.ok(smaller.h <= card.h);
     for (const other of map.zones.filter(item => item.id !== zone.id)) {

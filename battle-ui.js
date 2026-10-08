@@ -1,4 +1,4 @@
-import { BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone } from './battle-model.js';
+import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts } from './battle-model.js';
 import { drawBattle } from './battle-render.js';
 import { loadWorkspace } from './storage.js';
 import { playersFromDraft } from './players.js';
@@ -27,6 +27,7 @@ const planHistory = () => {
 };
 let planAction = 'new';
 let selectedPlayer = null;
+let selectedFromZone = null;
 let selectedZone = map().zones[0].id;
 let poolOnly = true;
 let drag = null;
@@ -101,35 +102,37 @@ function renderSource() {
   $('battle-roster-help').textContent = count ? 'Copies players into this battle. No API calls.' : 'Add names here, or load a roster in BaseGrid at this same address.';
 }
 function selection() {
-  const player = plan().players.find(player => player.id === selectedPlayer);
+  const player = battlePlayer(plan(), selectedPlayer);
   if (!player) selectedPlayer = null;
   $('battle-selection').hidden = !player;
-  $('battle-selection-name').textContent = player ? player.name + ' selected — choose a zone' : '';
-  document.querySelectorAll('.battle-chip-name').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.playerId === selectedPlayer)));
+  $('battle-selection-name').textContent = player ? (selectedFromZone ? 'Move ' : 'Add ') + player.name + ' — choose a zone' : '';
+  document.querySelectorAll('.battle-chip-name').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.playerId === selectedPlayer && button.dataset.sourceZone === selectedFromZone)));
 }
-function choosePlayer(id) {
-  selectedPlayer = selectedPlayer === id ? null : id;
+function choosePlayer(id, sourceZone = null) {
+  selectedPlayer = selectedPlayer === id && selectedFromZone === sourceZone ? null : id;
+  selectedFromZone = selectedPlayer ? sourceZone : null;
   renderPlayers(); renderTeam(); selection();
-  if (selectedPlayer) announce('Choose a zone for ' + plan().players.find(player => player.id === id).name + '.');
+  if (selectedPlayer) announce('Choose a zone for ' + battlePlayer(plan(), id).name + '.');
   else announce('Selection cancelled.');
   if (selectedPlayer && window.matchMedia('(max-width:650px)').matches) $('battle-map-scroll').scrollIntoView({ block: 'center' });
 }
-function assign(id, zoneId) {
-  const player = plan().players.find(player => player.id === id);
+function assign(id, zoneId, sourceZone = null) {
+  const player = battlePlayer(plan(), id);
   if (!player) return;
   try {
-    const next = assignBattlePlayer(plan(), state.selectedMap, id, zoneId);
+    const next = assignBattlePlayer(plan(), state.selectedMap, id, zoneId, sourceZone);
     selectedPlayer = null;
     if (zoneId) selectedZone = zoneId;
     if (next === plan()) { selection(); renderPlayers(); renderTeam(); announce('Assignment unchanged.'); return; }
-    change(next, player.name + (zoneId ? ' assigned to ' + map().zones.find(zone => zone.id === zoneId).name + '.' : ' returned to the pool.'));
+    change(next, player.name + (zoneId ? ' assigned to ' + map().zones.find(zone => zone.id === zoneId).name + '.' : ' removed from ' + map().zones.find(zone => zone.id === sourceZone).name + '.'));
   } catch (error) { showError(error.message); }
 }
-function playerButton(player) {
+function playerButton(player, sourceZone = null) {
   const button = make('button', 'battle-player');
   button.type = 'button';
   button.dataset.playerId = player.id;
-  button.setAttribute('aria-pressed', String(selectedPlayer === player.id));
+  if (sourceZone) button.dataset.sourceZone = sourceZone;
+  button.setAttribute('aria-pressed', String(selectedPlayer === player.id && selectedFromZone === sourceZone));
   button.setAttribute('aria-label', 'Select ' + player.name);
   const grip = make('span', 'battle-drag-grip', '⠿'); grip.setAttribute('aria-hidden', 'true'); grip.title = 'Drag to assign';
   button.append(grip, make('span', 'battle-player-name', player.name));
@@ -143,9 +146,10 @@ function playerButton(player) {
     meta.append(power);
   }
   if (meta.children.length) button.append(meta);
-  const zoneId = playerZone(plan(), player.id);
-  button.append(make('span', 'battle-player-location', map().zones.find(zone => zone.id === zoneId)?.name ?? 'Unassigned'));
-  button.addEventListener('click', () => choosePlayer(player.id));
+  const zones = playerZones(plan(), player.id).map(id => map().zones.find(zone => zone.id === id).name);
+  const location = player.id === ALLIES.id && !sourceZone ? 'Reusable label' : zones.join(' · ') || 'Unassigned';
+  button.append(make('span', 'battle-player-location', location));
+  button.addEventListener('click', () => choosePlayer(player.id, sourceZone));
   return button;
 }
 function clearDropTargets() { document.querySelectorAll('.drop-target').forEach(node => node.classList.remove('drop-target')); }
@@ -173,7 +177,7 @@ document.addEventListener('pointerdown', event => {
   const source = event.target.closest('.battle-player, .battle-chip-name');
   if (!source || event.button !== 0 || !event.isPrimary || (event.pointerType === 'touch' && !source.matches('.battle-chip-name') && !event.target.closest('.battle-drag-grip'))) return;
   cancelDrag();
-  drag = { source, id: source.dataset.playerId, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false };
+  drag = { source, id: source.dataset.playerId, sourceZone: source.dataset.sourceZone ?? null, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false };
 });
 document.addEventListener('pointermove', event => {
   if (!drag || event.pointerId !== drag.pointerId) return;
@@ -181,35 +185,37 @@ document.addEventListener('pointermove', event => {
   if (!drag.active && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) >= 8) {
     drag.active = true; document.body.setPointerCapture(drag.pointerId);
     drag.source.classList.add('battle-drag-source');
-    drag.ghost = make('div', 'battle-drag-ghost', plan().players.find(player => player.id === drag.id).name);
+    drag.ghost = make('div', 'battle-drag-ghost', battlePlayer(plan(), drag.id).name);
     document.body.append(drag.ghost); animateDrag();
   }
   if (drag.active) event.preventDefault();
 });
 document.addEventListener('pointerup', event => {
   if (!drag || event.pointerId !== drag.pointerId) return;
-  const { id, active } = drag;
+  const { id, active, sourceZone } = drag;
   const target = active ? dragTarget(event.clientX, event.clientY) : null;
   cancelDrag();
   if (!active) return;
   suppressDragClick = true;
-  if (target) assign(id, target.dataset.zone ?? null); else announce('Move cancelled. Assignments unchanged.');
+  if (target) assign(id, target.dataset.zone ?? null, sourceZone); else announce('Move cancelled. Assignments unchanged.');
 });
 document.addEventListener('pointercancel', cancelDrag);
 document.addEventListener('click', event => { if (suppressDragClick) { suppressDragClick = false; event.preventDefault(); event.stopPropagation(); } }, true);
 
 function renderPlayers() {
   const roster = plan().players;
-  const unassigned = roster.filter(player => playerZone(plan(), player.id) === null);
+  const unassigned = roster.filter(player => !playerZones(plan(), player.id).length);
   const query = $('battle-search').value.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
-  const players = sortBattlePlayers(poolOnly ? unassigned : roster, state.playerSort).filter(player => player.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(query));
+  const matches = player => player.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(query);
+  const players = sortBattlePlayers(poolOnly ? unassigned : roster, state.playerSort).filter(matches);
   $('battle-player-count').textContent = roster.length + ' players';
   $('battle-unassigned-count').textContent = unassigned.length;
   $('battle-unassigned-tab').setAttribute('aria-pressed', String(poolOnly));
   $('battle-all-tab').setAttribute('aria-pressed', String(!poolOnly));
-  $('battle-player-list').replaceChildren(...players.map(player => { const li = make('li'); li.append(playerButton(player)); return li; }));
-  $('battle-pool-empty').hidden = Boolean(players.length);
-  $('battle-pool-empty').textContent = query ? 'No matching players.' : !roster.length ? 'Add your players to get started.' : 'Everyone is assigned. Choose All players to reassign.';
+  const entries = matches(ALLIES) ? [ALLIES, ...players] : players;
+  $('battle-player-list').replaceChildren(...entries.map(player => { const li = make('li'); li.append(playerButton(player)); return li; }));
+  $('battle-pool-empty').hidden = Boolean(players.length || (query && entries.length));
+  $('battle-pool-empty').textContent = query ? 'No matching players.' : !roster.length ? 'Add your players to get started.' : 'Everyone is assigned. Choose All players to reuse a name.';
 }
 function renderTeam() {
   const zone = map().zones.find(zone => zone.id === selectedZone) ?? map().zones[0];
@@ -220,15 +226,15 @@ function renderTeam() {
   const select = $('battle-zone-select');
   select.replaceChildren(...map().zones.map(zone => { const option = make('option', '', zone.name); option.value = zone.id; return option; }));
   select.value = zone.id;
-  $('battle-team-help').textContent = ids.length ? 'Drag to reassign. Use × to return a player to the pool.' : 'This team is empty. Select a player, then choose this zone on the map.';
+  $('battle-team-help').textContent = ids.length ? 'Drag to move. Use × to remove only this assignment.' : 'This team is empty. Select a player, then choose this zone on the map.';
   $('battle-team-list').replaceChildren(...ids.map((id, index) => {
-    const player = plan().players.find(player => player.id === id);
-    const row = make('li'); row.append(playerButton(player));
+    const player = battlePlayer(plan(), id);
+    const row = make('li'); row.append(playerButton(player, zone.id));
     const actions = make('div', 'battle-team-actions');
     for (const [label, text, disabled, action] of [
       ['Move ' + player.name + ' up', '↑', index === 0, () => change(reorderBattlePlayer(plan(), zone.id, id, -1))],
       ['Move ' + player.name + ' down', '↓', index === ids.length - 1, () => change(reorderBattlePlayer(plan(), zone.id, id, 1))],
-      ['Return ' + player.name + ' to pool', '×', false, () => assign(id, null)],
+      ['Remove ' + player.name + ' from ' + zone.name, '×', false, () => assign(id, null, zone.id)],
     ]) { const button = make('button', '', text); button.type = 'button'; button.disabled = disabled; button.setAttribute('aria-label', label); button.title = label; button.addEventListener('click', action); actions.append(button); }
     row.append(actions); return row;
   }));
@@ -252,28 +258,29 @@ function zoneControl(zone, canvas, snapshot) {
   container.append(target);
   container.addEventListener('click', event => {
     if (event.target.closest('.battle-chip')) return;
-    if (selectedPlayer) assign(selectedPlayer, zone.id);
+    if (selectedPlayer) assign(selectedPlayer, zone.id, selectedFromZone);
     else { selectedZone = zone.id; renderTeam(); announce(zone.name + ' · ' + zone.names.length + ' assigned.'); }
   });
   if (zone.names.length) {
     const list = make('ul', 'battle-zone-players'); list.setAttribute('aria-label', 'Players in ' + zone.name);
     for (const id of snapshot.assignments[zone.id] ?? []) {
-      const player = snapshot.players.find(player => player.id === id);
+      const player = battlePlayer(snapshot, id);
       if (!player) continue;
       const chip = make('li', 'battle-chip');
       const name = make('button', 'battle-chip-name', player.name); name.type = 'button';
       name.dataset.playerId = id; name.setAttribute('aria-label', 'Select ' + player.name);
-      name.setAttribute('aria-pressed', String(selectedPlayer === id)); name.title = player.name + ' · Drag or select to move';
-      name.addEventListener('click', () => choosePlayer(id));
+      name.dataset.sourceZone = zone.id;
+      name.setAttribute('aria-pressed', String(selectedPlayer === id && selectedFromZone === zone.id)); name.title = player.name + ' · Drag or select to move';
+      name.addEventListener('click', () => choosePlayer(id, zone.id));
       const remove = make('button', 'battle-chip-remove'); remove.type = 'button'; remove.dataset.playerId = id;
-      const label = 'Return ' + player.name + ' to pool'; remove.setAttribute('aria-label', label); remove.title = label;
+      const label = 'Remove ' + player.name + ' from ' + zone.name; remove.setAttribute('aria-label', label); remove.title = label;
       const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) icon.setAttribute(key, value);
       const circle = document.createElementNS(icon.namespaceURI, 'circle');
       circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '9');
       const cross = document.createElementNS(icon.namespaceURI, 'path'); cross.setAttribute('d', 'M9 9l6 6M15 9l-6 6');
       icon.append(circle, cross); remove.append(icon);
-      remove.addEventListener('click', () => assign(id, null));
+      remove.addEventListener('click', () => assign(id, null, zone.id));
       chip.append(name, remove); list.append(chip);
     }
     container.append(list);
@@ -312,13 +319,14 @@ async function renderMap() {
     }
     $('battle-overflow').hidden = !lastDraw.overflow.length;
     $('battle-overflow-text').textContent = 'Names need more room in ' + lastDraw.overflow.map(zone => zone.name).join(', ') + '. Move some players to another zone before exporting.';
-    $('battle-export').disabled = !lastDraw.assigned || Boolean(lastDraw.overflow.length);
+    $('battle-export').disabled = !lastDraw.placementCount || Boolean(lastDraw.overflow.length);
   } catch (error) { if (version === renderVersion) { showError(error.message); lastDraw = null; } }
   finally { if (version === renderVersion) $('battle-map-stage').setAttribute('aria-busy', 'false'); }
 }
 function render() {
+  const counts = battleCounts(plan());
   $('battle-map-name').textContent = map().name;
-  $('battle-progress').textContent = plan().players.filter(player => playerZone(plan(), player.id) !== null).length + ' assigned · ' + plan().players.filter(player => playerZone(plan(), player.id) === null).length + ' unassigned';
+  $('battle-progress').textContent = counts.assigned + ' assigned · ' + counts.unassigned + ' unassigned' + (counts.alliesZones ? ' · Allies in ' + counts.alliesZones + (counts.alliesZones === 1 ? ' zone' : ' zones') : '');
   $('battle-undo').disabled = !planHistory().length;
   $('battle-reset').disabled = !Object.values(plan().assignments).some(ids => ids.length);
   renderPlayers(); renderTeam(); selection(); renderMap();
@@ -360,7 +368,7 @@ $('battle-unassigned-tab').addEventListener('click', () => { poolOnly = true; re
 $('battle-all-tab').addEventListener('click', () => { poolOnly = false; renderPlayers(); });
 $('battle-zone-select').addEventListener('change', () => {
   selectedZone = $('battle-zone-select').value;
-  if (selectedPlayer) assign(selectedPlayer, selectedZone); else renderTeam();
+  if (selectedPlayer) assign(selectedPlayer, selectedZone, selectedFromZone); else renderTeam();
 });
 $('battle-cancel-selection').addEventListener('click', () => { selectedPlayer = null; renderPlayers(); renderTeam(); selection(); announce('Selection cancelled.'); });
 document.addEventListener('keydown', event => {
@@ -398,7 +406,7 @@ $('battle-reset-dialog').addEventListener('close', () => {
   if ($('battle-reset-dialog').returnValue === 'clear') { selectedPlayer = null; change({ ...plan(), assignments: {} }, 'Assignments cleared. All players are back in the pool.'); }
 });
 $('battle-export').addEventListener('click', async () => {
-  if (!lastDraw || lastDraw.overflow.length || !lastDraw.assigned) return;
+  if (!lastDraw || lastDraw.overflow.length || !lastDraw.placementCount) return;
   const template = map(); const snapshot = structuredClone(plan());
   const button = $('battle-export'); button.disabled = true; button.textContent = 'Preparing PNG…'; button.setAttribute('aria-busy', 'true');
   try {
@@ -411,10 +419,10 @@ $('battle-export').addEventListener('click', async () => {
     const title = snapshot.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 80);
     $('battle-download').download = 'basegrid-' + template.id + '-' + title + '-' + new Date().toISOString().slice(0, 10) + '.png';
     const missing = snapshot.players.length - drawing.assigned;
-    $('battle-export-summary').textContent = drawing.canvas.width + ' × ' + drawing.canvas.height + ' PNG · ' + drawing.assigned + ' assigned' + (missing ? ' · ' + missing + ' unassigned players are not shown' : ' · Everyone included');
+    $('battle-export-summary').textContent = drawing.canvas.width + ' × ' + drawing.canvas.height + ' PNG · ' + drawing.assigned + ' players assigned' + (drawing.alliesZones ? ' · Allies in ' + drawing.alliesZones + (drawing.alliesZones === 1 ? ' zone' : ' zones') : '') + (missing ? ' · ' + missing + ' unassigned players are not shown' : snapshot.players.length ? ' · Everyone included' : '');
     $('battle-export-dialog').showModal();
   } catch (error) { showError(error.message || 'Could not create the PNG. Please try again.'); }
-  finally { button.textContent = 'Preview & export PNG'; button.disabled = !lastDraw?.assigned || Boolean(lastDraw?.overflow.length); button.removeAttribute('aria-busy'); }
+  finally { button.textContent = 'Preview & export PNG'; button.disabled = !lastDraw?.placementCount || Boolean(lastDraw?.overflow.length); button.removeAttribute('aria-busy'); }
 });
 $('battle-export-close').addEventListener('click', () => $('battle-export-dialog').close());
 $('battle-export-dialog').addEventListener('close', () => {

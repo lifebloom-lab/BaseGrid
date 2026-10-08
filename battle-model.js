@@ -2,6 +2,7 @@ import { normalizeImportedPlayer, sortPoolPlayers } from './players.js';
 
 export const BATTLE_KEY = 'basegrid.battles.v2';
 export const LEGACY_BATTLE_KEY = 'basegrid.battles.v1';
+export const ALLIES = Object.freeze({ id: 'battle:allies', name: 'Allies' });
 const zone = (id, name, rect) => ({ id, name, rect });
 const desertZone = (id, name, label, color, rect, bottom) => ({ id, name, rect, card: { label, color, bottom } });
 export const BATTLE_MAPS = {
@@ -51,7 +52,7 @@ export function sortBattlePlayers(players, order = 'rank') {
 }
 
 export function cleanBattlePlayer(player) {
-  if (!player || typeof player.id !== 'string' || !player.id || typeof player.name !== 'string' || !player.name.trim()) {
+  if (!player || typeof player.id !== 'string' || !player.id || player.id === ALLIES.id || typeof player.name !== 'string' || !player.name.trim()) {
     throw new Error('Invalid battle player.');
   }
   const { hqLevel, group } = normalizeImportedPlayer(player);
@@ -79,13 +80,13 @@ export function normalizeBattle(value, mapId) {
   const players = value.players.map(cleanBattlePlayer);
   const ids = new Set(players.map(player => player.id));
   if (ids.size !== players.length) throw new Error('Duplicate player identity.');
-  const assigned = new Set();
   const assignments = {};
   for (const zone of BATTLE_MAPS[mapId].zones) {
+    const assigned = new Set();
     const list = value.assignments?.[zone.id] ?? [];
     if (!Array.isArray(list)) throw new Error('Invalid team.');
     assignments[zone.id] = list.map(id => {
-      if (!ids.has(id) || assigned.has(id)) throw new Error('Invalid or repeated assignment.');
+      if ((!ids.has(id) && id !== ALLIES.id) || assigned.has(id)) throw new Error('Invalid or repeated assignment.');
       assigned.add(id);
       return id;
     });
@@ -199,15 +200,38 @@ export function mergeBattlePlayers(plan, incoming) {
 }
 
 export function playerZone(plan, playerId) {
-  return Object.keys(plan.assignments).find(id => plan.assignments[id].includes(playerId)) ?? null;
+  return playerZones(plan, playerId)[0] ?? null;
 }
 
-export function assignBattlePlayer(plan, mapId, playerId, zoneId) {
-  if (!plan.players.some(player => player.id === playerId)) throw new Error('Choose a player from this roster.');
-  if (zoneId !== null && !BATTLE_MAPS[mapId]?.zones.some(zone => zone.id === zoneId)) throw new Error('Choose a zone on this map.');
-  if (playerZone(plan, playerId) === zoneId) return plan;
-  const assignments = Object.fromEntries(Object.entries(plan.assignments).map(([id, players]) => [id, players.filter(value => value !== playerId)]));
-  if (zoneId !== null) assignments[zoneId] = [...(assignments[zoneId] ?? []), playerId];
+export function playerZones(plan, playerId) {
+  return Object.keys(plan.assignments).filter(id => plan.assignments[id].includes(playerId));
+}
+
+export function battlePlayer(plan, playerId) {
+  return playerId === ALLIES.id ? ALLIES : plan.players.find(player => player.id === playerId);
+}
+
+export function battleCounts(plan) {
+  const ids = Object.values(plan.assignments).flat();
+  const unique = new Set(ids);
+  const assigned = plan.players.filter(player => unique.has(player.id)).length;
+  return { assigned, unassigned: plan.players.length - assigned, placementCount: ids.length,
+    alliesZones: playerZones(plan, ALLIES.id).length };
+}
+
+// The roster adds another assignment. Moving a map capsule changes only its
+// source zone, even when the player also covers other zones.
+export function assignBattlePlayer(plan, mapId, playerId, zoneId, sourceZone = null) {
+  if (!battlePlayer(plan, playerId)) throw new Error('Choose a player from this roster.');
+  for (const id of [zoneId, sourceZone]) {
+    if (id !== null && !BATTLE_MAPS[mapId]?.zones.some(zone => zone.id === id)) throw new Error('Choose a zone on this map.');
+  }
+  if (zoneId === sourceZone) return plan;
+  if (sourceZone && !plan.assignments[sourceZone]?.includes(playerId)) return plan;
+  if (!sourceZone && plan.assignments[zoneId]?.includes(playerId)) return plan;
+  const assignments = { ...plan.assignments };
+  if (sourceZone) assignments[sourceZone] = assignments[sourceZone].filter(value => value !== playerId);
+  if (zoneId !== null && !assignments[zoneId]?.includes(playerId)) assignments[zoneId] = [...(assignments[zoneId] ?? []), playerId];
   return { ...plan, assignments };
 }
 
@@ -297,6 +321,7 @@ export function layoutNames(names, width, maxHeight, measure, { maxFont = 38, mi
 // before the next building/label; Canyon names stay inside existing panels.
 export function layoutBattleZones(map, plan, width, height, measure) {
   const players = new Map(plan.players.map(player => [player.id, player]));
+  players.set(ALLIES.id, ALLIES);
   return map.zones.map(zone => {
     const [rx, ry, rw, rh] = zone.rect;
     const names = (plan.assignments[zone.id] ?? []).map(id => players.get(id)?.name).filter(Boolean);
