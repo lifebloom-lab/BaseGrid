@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { drawBattle } from '../battle-render.js';
 import { BATTLE_MAPS, emptyBattle } from '../battle-model.js';
 
-test('Canyon editor has white name areas while exports paint names on the original template', t => {
+test('Canyon editor and export preserve the original panel colors', t => {
   const drawings = [];
   const originalDocument = globalThis.document;
   t.after(() => {
@@ -25,8 +25,7 @@ test('Canyon editor has white name areas while exports paint names on the origin
   const image = { naturalWidth: 2842, naturalHeight: 2214 };
   const editor = drawBattle(BATTLE_MAPS.canyon, plan, image, { editing: true });
   const exported = drawBattle(BATTLE_MAPS.canyon, plan, image);
-  assert.equal(drawings[0].fills.length, 2, 'editor paints a white panel over the map');
-  assert.equal(drawings[0].fills[1].color, '#fffffff2');
+  assert.equal(drawings[0].fills.length, 1, 'editor paints no rectangle over the template');
   assert.equal(drawings[0].labels.includes('Aurora'), false, 'the DOM capsule supplies the editing label');
   assert.equal(drawings[1].fills.length, 1, 'export paints no rectangle over the template');
   assert.ok(drawings[1].labels.includes('Aurora'), 'the exported PNG includes the full player name');

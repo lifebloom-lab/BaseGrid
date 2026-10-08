@@ -87,10 +87,6 @@ export function drawBattle(map, plan, image, { editing = false } = {}) {
   if (map.id === 'desert') drawDesertTitle(ctx, width, height);
   for (const zone of zones) {
     if (!zone.card && !zone.names.length) continue;
-    if (editing && !zone.card) {
-      ctx.fillStyle = '#fffffff2';
-      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
-    }
     if (zone.card) {
       // Replace the original fixed label with a header and an expanding body.
       ctx.fillStyle = '#fffdf8';
