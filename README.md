@@ -87,6 +87,16 @@ Open `/battle.html` at the same address as BaseGrid (locally, <http://127.0.0.1:
 
 Each plan autosaves its own roster, title, and assignments under `basegrid.battles.v2`. Existing single-map drafts migrate automatically, preserving their players, placements and titles; the original `basegrid.battles.v1` data remains as a backup. The formation and import library are only read, never written by this page. Returning to BaseGrid or clearing battle assignments leaves those records intact. Use the same browser/address to access the current roster and saved battle plans. Battle planning and image export work locally, without an API, account, or additional service.
 
+## Share editable data
+
+Use **Data** in the header of either planner, then **Export data** to download a dated `.basegrid.json` file. Send it to another BaseGrid user; they open **Data**, choose the file under **Import data**, review its contents, and click **Import data**. PNG export remains separate for sharing an image in game.
+
+The file contains every saved battle plan (including reused names and Allies), formation inputs/positions/obstacles/placement progress, player HQ/rank/power, server and alliance context, and saved roster/alliance lookups. Known display preferences are included too. API keys, unrelated browser storage, map images and obsolete migration backups are excluded. File transfers and reusing imported rosters need no API calls or account.
+
+Battle plans are added as independent copies. Existing plans stay intact; matching titles become **Team A (imported)**, then **Team A (imported 2)**. Unused default plans are replaced by the imported copies. Existing saved rosters and alliance searches win on a matching ID. Formation import is optional: **Replace my current formation** is unchecked when a formation is already saved. With no saved formation, **Load the included formation** is checked. Recipient display preferences are kept when already set.
+
+The app validates files before writing, rejects unsupported versions and files over 10 MB, and checks that local data has not changed since the preview. A failed write attempts to restore the previous values and reports failure instead of claiming success. After a successful import, click **Done** to reload; other open BaseGrid tabs at the same address also reload to avoid stale autosaves. The imported copy is stored in that browser/address and does not sync later edits with the sender.
+
 ## Files
 
 ```text
@@ -106,6 +116,7 @@ battle.html / battle.css  Hidden battle assignment preview and responsive interf
 battle-model.js           Independent battle drafts, assignments, and name fitting
 battle-ui.js              Roster copying, drag/tap assignment, undo, and PNG preview
 battle-render.js          Shared map rendering and full-resolution PNG output
+data-transfer*.js / .css Portable data files, import review and safe merging
 battle-*.png              Original Canyon Storm and Desert Storm templates
 grid-layout.js           Unit grid, footprint collisions, obstacle sizes, and canvas bounds
 free-formation.js         Legacy coarse-slot layout support for saved-plan migration

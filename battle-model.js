@@ -112,7 +112,7 @@ function checkTitle(plans, title, exceptId) {
   return clean;
 }
 
-function normalizeBattles(saved) {
+export function normalizeBattles(saved) {
   if (saved?.version !== 2 || !saved.plans) throw new Error('The saved battle plans could not be opened.');
   const ids = new Set();
   const plans = Object.fromEntries(Object.keys(BATTLE_MAPS).map(mapId => {

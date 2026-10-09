@@ -4,6 +4,7 @@ const root = new URL('../', import.meta.url);
 const output = new URL('dist/', root);
 // An explicit list keeps backend code, tests, Git files, and secrets out of hosting.
 const assets = [
+  'data-transfer.js', 'data-transfer-ui.js', 'data-transfer.css',
   'index.html', 'styles.css', 'ui.js', 'placement.js', 'players.js', 'storage.js',
   'import-ui.js', 'lastwar-api.js', 'roster-cache.js', 'reorder-ui.js',
   'placement-messages.js', 'free-formation.js', 'tile-placement.js', 'grid-layout.js', 'map-zoom.js', 'lifebloom-zombie.png',

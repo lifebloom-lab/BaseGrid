@@ -8,13 +8,14 @@
   <title>BaseGrid · Alliance planner</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310191c'/%3E%3Cpath fill='%2395e5bf' d='M6 6h8v8H6zm12 0h8v8h-8zM6 18h8v8H6z'/%3E%3Cpath fill='%23d6a970' d='M18 18h8v8h-8z'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./styles.css?v=20261008-search">
-  <script type="module" src="./ui.js?v=20261008-search"></script>
+  <script type="module" src="./ui.js?v=20261008-data"></script>
+  <link rel="stylesheet" href="./data-transfer.css?v=1">
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="./" aria-label="BaseGrid home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>BaseGrid</a>
     <span class="header-caption">LAST WAR <span>/</span> ALLIANCE PLANNER</span>
-    <span id="save-status" class="save-status" role="status">Saved on this device</span>
+    <div class="data-actions"><span id="save-status" class="save-status" role="status">Saved on this device</span><button id="open-data" class="button secondary" type="button" aria-haspopup="dialog">Data</button></div>
   </header>
   <main>
     <div class="page-heading"><div><p class="eyebrow">A LITTLE ORDER ON THE MAP</p><h1>Formation planner<span>.</span></h1></div></div>

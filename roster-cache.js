@@ -42,6 +42,19 @@ function cleanEntry(entry) {
       allianceId: allianceId(entry.id) ? entry.id : entry.context?.allianceId }) } : {}) };
 }
 
+export function normalizeRosterLibrary(value) {
+  if (value?.version !== 1 || !Array.isArray(value.entries)) throw new Error('Invalid saved roster library.');
+  const keys = new Set();
+  const entries = value.entries.map(item => {
+    const entry = cleanEntry(item);
+    const key = entry.kind + ':' + entry.id;
+    if (keys.has(key)) throw new Error('Duplicate saved lookup.');
+    keys.add(key);
+    return entry;
+  });
+  return { version: 1, entries };
+}
+
 /** Persistent, opt-in refreshes: no expiry, background requests, or saved credentials. */
 export function createRosterCache({ getStorage = () => window.localStorage, onWarning = () => {},
   getAlliances = fetchAlliances, getMembers = fetchMembers, now = Date.now } = {}) {

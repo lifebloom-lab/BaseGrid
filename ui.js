@@ -1,3 +1,4 @@
+import { setupDataTransfer } from './data-transfer-ui.js';
 import { parseManualPlayers, playersFromDraft, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js';
 import { tileKey } from './free-formation.js';
 import { gridCanvas, previewGridMove } from './grid-layout.js';
@@ -768,3 +769,5 @@ byId('import-dialog').addEventListener('close', () => {
 });
 if (!draft.rosterContext && imported.previousContext) { draft = { ...draft, rosterContext: imported.previousContext }; persist(); }
 render();
+
+setupDataTransfer();

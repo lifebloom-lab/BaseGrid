@@ -1,3 +1,4 @@
+import { setupDataTransfer } from './data-transfer-ui.js';
 import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts } from './battle-model.js';
 import { drawBattle } from './battle-render.js';
 import { loadWorkspace } from './storage.js';
@@ -433,3 +434,5 @@ window.addEventListener('focus', renderSource);
 const savedPlayers = [...sourcePlayers(), ...createRosterCache().listRosters().flatMap(roster => roster.data)];
 for (const id of Object.keys(BATTLE_MAPS)) state.plans[id] = state.plans[id].map(plan => restoreBattlePowers(plan, savedPlayers));
 syncSettings(); renderSource(); persist(); render();
+
+setupDataTransfer();

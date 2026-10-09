@@ -6,10 +6,11 @@
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261008-search">
   <link rel="stylesheet" href="./battle.css?v=1">
-  <script type="module" src="./battle-ui.js?v=1"></script>
+  <script type="module" src="./battle-ui.js?v=20261008-data"></script>
+  <link rel="stylesheet" href="./data-transfer.css?v=1">
 </head>
 <body class="battle-app">
-  <header class="battle-header"><div><a href="./">‹ BaseGrid</a><span class="lab-badge">LABS · PREVIEW</span></div><p id="battle-save" role="status">Saved on this device</p></header>
+  <header class="battle-header"><div><a href="./">‹ BaseGrid</a><span class="lab-badge">LABS · PREVIEW</span></div><div class="data-actions"><p id="battle-save" role="status">Saved on this device</p><button id="open-data" class="button secondary" type="button" aria-haspopup="dialog">Data</button></div></header>
   <main class="battle-main">
     <div class="battle-heading"><div><p class="eyebrow">A PLACE FOR EVERY PLAYER</p><h1>Battle planner<span>.</span></h1><p class="field-help">Assign your teams, then share the plan as an image.</p></div><button id="battle-export" class="button primary" type="button" disabled>Preview &amp; export PNG</button></div>
     <p id="battle-error" class="error" role="alert" hidden></p>

@@ -1,0 +1,26 @@
+.data-actions { display:flex; align-items:center; gap:12px; margin-left:auto; min-width:0; }
+.data-actions .button { min-height:40px; padding:8px 14px; font-size:.8rem; }
+.data-actions .save-status { margin-left:0; }
+#data-dialog { width:min(560px,calc(100% - 28px)); max-width:560px; max-height:90dvh; overflow:auto; padding:26px; }
+#data-dialog h2 { font-size:1.4rem; margin:0; }
+#data-dialog h3 { font-size:1rem; margin:0 0 10px; }
+#data-dialog p { font-size:.85rem; line-height:1.5; margin:8px 0 14px; }
+#data-dialog .data-section, #data-import-form { padding-top:18px; margin-top:18px; border-top:1px solid var(--line); }
+#data-dialog form { display:block; }
+#data-dialog label { display:block; margin:8px 0; font-size:.85rem; }
+#data-dialog input[type=file] { display:block; width:100%; min-width:0; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--muted); font:inherit; font-size:.8rem; }
+#data-dialog input::file-selector-button { margin-right:10px; padding:8px 10px; border:1px solid var(--line); border-radius:5px; color:var(--text); background:var(--panel); cursor:pointer; }
+#data-dialog .button { min-height:42px; padding:10px 14px; font-size:.85rem; text-decoration:none; }
+#data-download { display:inline-flex; align-items:center; }
+#data-download[aria-disabled=true] { opacity:.5; cursor:not-allowed; }
+#data-dialog .data-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+#data-plan-list { max-height:190px; overflow:auto; padding-left:20px; margin:12px 0; font-size:.85rem; line-height:1.6; }
+#data-plan-list li { margin:6px 0; overflow-wrap:anywhere; }
+#data-dialog #data-formation-option { margin-top:18px; }
+#data-dialog .data-checkbox { display:flex; align-items:center; gap:10px; cursor:pointer; }
+#data-dialog .data-checkbox input { flex:0 0 18px; width:18px; height:18px; min-width:18px; margin:0; accent-color:var(--mint); }
+#data-dialog #data-error { color:#f3bdb5; border:1px solid #af7770; background:#3c2826; padding:12px; border-radius:8px; }
+#data-status.is-loading::before { content:''; display:inline-block; width:12px; height:12px; margin-right:8px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:data-spin .8s linear infinite; }
+@keyframes data-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { #data-status.is-loading::before { animation:none; } }
+@media(max-width:600px) { #data-dialog { padding:20px; } .data-actions { gap:8px; } .data-actions .save-status { max-width:110px; text-align:right; white-space:normal; font-size:.7rem; } }
