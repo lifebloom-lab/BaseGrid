@@ -5,6 +5,7 @@ import { STORAGE_KEY, DEFAULT_DRAFT, saveWorkspace, loadWorkspace } from '../sto
 import { BATTLE_KEY, LEGACY_BATTLE_KEY, ALLIES, emptyBattles, emptyBattle, currentBattle, updateBattlePlan, createBattlePlan, assignBattlePlayer, mergeBattlePlayers, saveBattles, loadBattles, playerZones } from '../battle-model.js';
 import { ROSTER_CACHE_KEY, createRosterCache } from '../roster-cache.js';
 import { MESSAGE_LANGUAGE_KEY } from '../placement-messages.js';
+import { API_KEY_STORAGE_KEY, saveApiKey, readSavedApiKey } from '../api-key.js';
 import { createSession, applyAction } from '../placement.js';
 import { autoPlaceBases, openTilePlacement, confirmTilePlacement, moveTile, getTilePlan } from '../tile-placement.js';
 
@@ -37,6 +38,18 @@ function source() {
   storage.setItem('basegrid.map-zoom.v1', '.5');
   return storage;
 }
+
+test('a remembered API key never travels in a backup or overwrites the recipient’s key', () => {
+  const storage = source();
+  saveApiKey(storage, 'sender-private-key');
+  const text = JSON.stringify(exportDataBackup(storage));
+  assert.equal(text.includes('sender-private-key'), false);
+  assert.equal(text.includes(API_KEY_STORAGE_KEY), false);
+  const recipient = memory();
+  saveApiKey(recipient, 'recipient-private-key');
+  commitDataImport(recipient, prepareDataImport(recipient, parseDataBackup(text)));
+  assert.equal(readSavedApiKey(recipient), 'recipient-private-key');
+});
 
 test('a portable file restores formation, obstacles, confirmations, metadata, cached lookups and independent battle copies', async () => {
   const original = source();

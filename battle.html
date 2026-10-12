@@ -4,9 +4,9 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
-  <link rel="stylesheet" href="./styles.css?v=20261008-search">
+  <link rel="stylesheet" href="./styles.css?v=20261012-key">
   <link rel="stylesheet" href="./battle.css?v=20261012-battle-import">
-  <script type="module" src="./battle-ui.js?v=20261012-battle-import"></script>
+  <script type="module" src="./battle-ui.js?v=20261012-key"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=1">
 </head>
 <body class="battle-app">
@@ -85,7 +85,7 @@
           <div id="import-key-field" class="import-field">
             <label for="import-key">LastWarTools API key</label>
             <input id="import-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="import-key-help">
-            <p id="import-key-help" class="field-help">Used for lookups. Never saved. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key</a></p>
+            <p id="import-key-help" class="field-help">Used only for LastWarTools lookups. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key</a></p>
           </div>
         </div>
       </section>
@@ -141,7 +141,7 @@
         <p>Refresh power, HQ, and rank in all saved plans. Names and assignments stay in place.</p>
         <label for="battle-roster-update-key">LastWarTools API key</label>
         <input id="battle-roster-update-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="battle-roster-update-key-help">
-        <p id="battle-roster-update-key-help" class="field-help">Used for this update. Never saved. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key ↗</a></p>
+        <p id="battle-roster-update-key-help" class="field-help">Used only for LastWarTools lookups. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key ↗</a></p>
         <p class="battle-roster-update-cost">1 API call · Saved locally after updating</p>
       </div>
       <p id="battle-roster-update-empty" hidden>No imported alliance is linked to these players. Use Import roster to add your alliance first.</p>

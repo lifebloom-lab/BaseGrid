@@ -81,7 +81,7 @@ class ServerTests(unittest.TestCase):
                      '/tile-placement.js', '/placement-messages.js', '/free-formation.js', '/grid-layout.js', '/placement.js',
                      '/players.js', '/storage.js', '/styles.css', '/lifebloom-zombie.png', '/map-zoom.js',
                      '/data-transfer.js', '/data-transfer-ui.js', '/data-transfer.css',
-                     '/roster-update.js', '/roster-update-ui.js',
+                     '/roster-update.js', '/roster-update-ui.js', '/api-key.js',
                      '/battle.html', '/battle.css', '/battle-ui.js', '/battle-model.js', '/battle-render.js',
                      '/battle-canyon.png', '/battle-desert.png']:
             self.assertEqual(self.get(path)[0], 200)

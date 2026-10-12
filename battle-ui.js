@@ -1,6 +1,6 @@
 import { setupDataTransfer } from './data-transfer-ui.js';
-import { setupRosterUpdate } from './roster-update-ui.js';
-import { setupRosterImport } from './import-ui.js?v=20261012-battle-import';
+import { setupRosterUpdate } from './roster-update-ui.js?v=20261012-key';
+import { setupRosterImport } from './import-ui.js?v=20261012-key';
 import { refreshPlayerStats } from './roster-update.js';
 import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-delete';
 import { drawBattle } from './battle-render.js?v=20261012-room';

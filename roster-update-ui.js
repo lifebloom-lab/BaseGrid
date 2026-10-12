@@ -1,4 +1,5 @@
 import { fetchMembers } from './lastwar-api.js';
+import { setupSavedApiKey } from './api-key.js?v=20261012-key';
 import { loadWorkspace } from './storage.js';
 import { currentBattle, loadBattles, normalizeBattles } from './battle-model.js?v=20261012-power';
 import { rosterContextLabels } from './players.js';
@@ -7,6 +8,7 @@ import { readRosterLibrary, rosterUpdateSources, prepareRosterUpdate, commitRost
 export function setupRosterUpdate({ getState, onUpdated }) {
   const $ = id => document.getElementById(id);
   const dialog = $('battle-roster-update-dialog');
+  const keyPreference = setupSavedApiKey($('battle-roster-update-key'), { onWarning: message => error(message) });
   let sources = [];
   let request = null;
   let pending = null;
@@ -46,12 +48,14 @@ export function setupRosterUpdate({ getState, onUpdated }) {
     $('battle-roster-update-form').setAttribute('aria-busy', String(value));
     $('battle-roster-update-alliance').disabled = value || Boolean(pending);
     $('battle-roster-update-key').disabled = value || Boolean(pending);
+    keyPreference.setBusy(value || Boolean(pending));
     $('battle-roster-update-submit').disabled = value || !selected();
     $('battle-roster-update-submit').textContent = value ? 'Updating…' : pending ? 'Save update' : 'Update roster';
   }
   $('battle-update-roster').addEventListener('click', () => {
     error(); status(); pending = null;
     $('battle-roster-update-form').reset();
+    keyPreference.open();
     $('battle-roster-update-close').textContent = 'Cancel';
     $('battle-roster-update-controls').hidden = false;
     $('battle-roster-update-submit').hidden = false;
@@ -70,7 +74,7 @@ export function setupRosterUpdate({ getState, onUpdated }) {
   });
   $('battle-roster-update-alliance').addEventListener('change', () => { error(); context(); });
   $('battle-roster-update-close').addEventListener('click', () => dialog.close());
-  function cancel() { request?.abort(); request = null; pending = null; $('battle-roster-update-key').value = ''; }
+  function cancel() { request?.abort(); request = null; pending = null; keyPreference.clear(); }
   dialog.addEventListener('cancel', cancel);
   dialog.addEventListener('close', cancel);
   $('battle-roster-update-form').addEventListener('submit', async event => {
@@ -87,8 +91,10 @@ export function setupRosterUpdate({ getState, onUpdated }) {
           throw new Error('This tab differs from the saved plans. Reload it before updating the roster.');
         }
         busy(true); status('Getting fresh player stats…', true);
-        const data = await fetchMembers(entry.id, { apiKey: $('battle-roster-update-key').value, signal: controller.signal });
+        const apiKey = $('battle-roster-update-key').value;
+        const data = await fetchMembers(entry.id, { apiKey, signal: controller.signal });
         if (controller.signal.aborted || !dialog.open) return;
+        keyPreference.remember(apiKey);
         pending = { ...entry, data, savedAt: Date.now() };
       }
       const prepared = prepareRosterUpdate(storage(), pending);

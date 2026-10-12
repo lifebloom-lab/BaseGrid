@@ -1,14 +1,16 @@
 import { orderPlayers } from './lastwar-api.js';
 import { playerDetails, rosterContextLabels } from './players.js';
 import { createRosterCache } from './roster-cache.js?v=20261012-battle-import';
+import { setupSavedApiKey } from './api-key.js?v=20261012-key';
 
-/** A single active step; credentials only live while the dialog is open. */
+/** A single active step, with optional device-local key storage. */
 export function setupRosterImport({ onImport, hasRoster, previousPlayers, previousContext,
   destinationHelp = 'Players will be added to your base pool.' }) {
   const byId = id => document.getElementById(id);
   const dialog = byId('import-dialog');
   const form = byId('import-form');
   const key = byId('import-key');
+  const keyPreference = setupSavedApiKey(key, { onWarning: value => message('import-cache-warning', value) });
   const server = byId('import-server');
   const selection = byId('import-alliance');
   const directId = byId('import-alliance-id');
@@ -71,6 +73,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     if (step !== 'saved') byId(`import-credentials-${step}`).append(byId('import-key-field'));
     byId('import-key-field').hidden = !showKey;
     for (const input of [key, server, selection, directId, order, savedSelection]) input.disabled = busy;
+    keyPreference.setBusy(busy);
 
     const actions = {
       'find-alliances': { visible: step === 1, label: 'Find alliances' },
@@ -212,6 +215,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     run(refresh ? 'refresh-alliances' : 'find-alliances', refresh ? 'Refreshing alliances…' : 'Finding alliances…', async (options, current) => {
       const result = await cache.loadAlliances(server.value, options, { refresh });
       if (!current()) return;
+      if (result.source === 'api') keyPreference.remember(options.apiKey);
       const previous = selection.value;
       alliances = result.data;
       allianceServerId = Number(result.id);
@@ -241,6 +245,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     run(refresh ? 'refresh-roster' : 'load-roster', refresh ? 'Refreshing players…' : 'Loading players…', async (options, current) => {
       const result = await cache.loadRoster(id, options, { refresh, label, context });
       if (!current()) return;
+      if (result.source === 'api') keyPreference.remember(options.apiKey);
       showRoster(result, saved);
       return 'import-preview-title';
     });
@@ -255,6 +260,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     cancelRequest();
     dialog.returnValue = '';
     form.reset();
+    keyPreference.open();
     clearAlliances();
     fromSaved = false;
     byId('import-direct').open = false;
@@ -273,7 +279,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
   byId('change-import-alliance').addEventListener('click', back);
   dialog.addEventListener('close', () => {
     cancelRequest();
-    key.value = '';
+    keyPreference.clear();
     clearAlliances();
   });
   dialog.addEventListener('cancel', cancelRequest);
