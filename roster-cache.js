@@ -37,6 +37,8 @@ function cleanEntry(entry) {
     });
   } else throw new Error('Invalid saved lookup.');
   return { kind: entry.kind, id: entry.id.toLowerCase(), savedAt: entry.savedAt,
+    ...(entry.kind === 'roster' && Number.isSafeInteger(entry.statsUpdatedAt) && entry.statsUpdatedAt >= 0 && entry.statsUpdatedAt <= entry.savedAt
+      ? { statsUpdatedAt: entry.statsUpdatedAt } : {}),
     label: typeof entry.label === 'string' ? entry.label : entry.id, data,
     ...(entry.kind === 'roster' ? { context: normalizeRosterContext({ ...entry.context,
       allianceId: allianceId(entry.id) ? entry.id : entry.context?.allianceId }) } : {}) };

@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261008-search">
-  <link rel="stylesheet" href="./battle.css?v=20261012-power">
-  <script type="module" src="./battle-ui.js?v=20261012-power"></script>
+  <link rel="stylesheet" href="./battle.css?v=20261012-update">
+  <script type="module" src="./battle-ui.js?v=20261012-update"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=1">
 </head>
 <body class="battle-app">
@@ -27,6 +27,8 @@
         <section id="battle-pool" class="panel battle-roster" aria-labelledby="battle-roster-title">
           <div class="battle-section-heading"><h2 id="battle-roster-title">Players</h2><span id="battle-player-count"></span></div>
           <button id="battle-copy-roster" class="button secondary" type="button">Use BaseGrid roster</button>
+          <button id="battle-update-roster" class="button secondary" type="button" aria-haspopup="dialog">Update roster</button>
+          <p id="battle-roster-updated" class="field-help" hidden></p>
           <button id="battle-add-names" class="text-button" type="button">＋ Add names</button>
           <p id="battle-roster-help" class="field-help">Copy your saved roster or add names manually.</p>
           <label class="sr-only" for="battle-search">Search battle players</label><input id="battle-search" type="search" placeholder="Search players…" autocomplete="off">
@@ -40,7 +42,7 @@
         <div class="panel battle-board">
           <div class="battle-map-toolbar"><div><h2 id="battle-map-name">Canyon Storm</h2><p id="battle-progress" class="field-help">0 assigned</p></div><div class="battle-board-actions"><label class="battle-checkbox"><input id="battle-show-power" type="checkbox" checked>Show power</label><button id="battle-undo" class="button secondary" type="button" disabled>Undo</button><button id="battle-zoom" class="button secondary" type="button" aria-pressed="false">Enlarge map</button></div></div>
           <div id="battle-selection" class="battle-selection" hidden><span id="battle-selection-name"></span><button id="battle-cancel-selection" type="button" class="text-button">Cancel</button></div>
-          <p id="battle-status" class="battle-instructions" role="status" aria-live="polite">Select a zone to view its team.</p>
+          <p id="battle-status" class="battle-instructions" role="status" aria-live="polite">Tap + Names on a building, or drag players onto the map.</p>
           <div id="battle-overflow" class="battle-overflow" role="status" hidden><p id="battle-overflow-text"></p></div>
           <div id="battle-map-scroll" class="battle-map-scroll" tabindex="0" role="region" aria-label="Battle map; scroll to explore">
             <div id="battle-map-stage" class="battle-map-stage"><canvas id="battle-canvas" aria-hidden="true"></canvas><div id="battle-zones" class="battle-zones" role="group" aria-label="Assignment zones"></div></div>
@@ -51,12 +53,45 @@
           <div class="battle-section-heading"><h2 id="battle-zone-title">Zone team</h2><span id="battle-zone-count"></span></div>
           <label class="sr-only" for="battle-zone-select">Selected zone</label>
           <div class="battle-select"><select id="battle-zone-select"></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <button id="battle-team-add" class="button secondary" type="button" aria-haspopup="dialog">+ Names</button>
           <p id="battle-team-help" class="field-help">Select players and drop them on a zone.</p>
           <ul id="battle-team-list" class="battle-team-list" aria-label="Players assigned to this zone"></ul>
         </section>
       </section>
     </div>
   </main>
+  <dialog id="battle-roster-update-dialog" class="battle-dialog battle-roster-update" aria-labelledby="battle-roster-update-title">
+    <form id="battle-roster-update-form">
+      <h2 id="battle-roster-update-title" tabindex="-1">Update roster</h2>
+      <div id="battle-roster-update-controls">
+        <p id="battle-roster-update-context"></p>
+        <div id="battle-roster-update-choice"><label for="battle-roster-update-alliance">Alliance</label><div class="battle-select"><select id="battle-roster-update-alliance"><option value="">Choose an alliance…</option></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+        <p id="battle-roster-update-date" class="field-help" hidden></p>
+        <p>Refresh power, HQ, and rank in all saved plans. Names and assignments stay in place.</p>
+        <label for="battle-roster-update-key">LastWarTools API key</label>
+        <input id="battle-roster-update-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="battle-roster-update-key-help">
+        <p id="battle-roster-update-key-help" class="field-help">Used for this update. Never saved. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key ↗</a></p>
+        <p class="battle-roster-update-cost">1 API call · Saved locally after updating</p>
+      </div>
+      <p id="battle-roster-update-empty" hidden>No imported alliance is linked to these players. <a href="./">Import your alliance in BaseGrid</a>, then use its roster here.</p>
+      <p id="battle-roster-update-error" class="error" role="alert" hidden></p>
+      <p id="battle-roster-update-status" role="status" aria-live="polite" hidden></p>
+      <div class="battle-dialog-actions"><button id="battle-roster-update-close" class="button secondary" type="button">Cancel</button><button id="battle-roster-update-submit" class="button primary" type="submit">Update roster</button></div>
+    </form>
+  </dialog>
+  <dialog id="battle-picker-dialog" class="battle-dialog battle-picker" aria-labelledby="battle-picker-title" aria-describedby="battle-picker-context">
+    <form id="battle-picker-form">
+      <div class="battle-picker-header">
+        <div class="battle-picker-heading"><div><h2 id="battle-picker-title" tabindex="-1" autofocus>Add names</h2><p id="battle-picker-context"></p></div><button id="battle-picker-close" class="battle-picker-close" type="button" aria-label="Close player picker"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></button></div>
+        <label class="sr-only" for="battle-picker-search">Search names to add</label><input id="battle-picker-search" type="search" placeholder="Search players…" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="battle-picker-controls"><div class="battle-pool-tabs" role="group" aria-label="Names to show"><button id="battle-picker-all" type="button" aria-pressed="true">All players</button><button id="battle-picker-unassigned" type="button" aria-pressed="false">Unassigned</button></div>
+        <div class="battle-picker-list-heading"><p id="battle-picker-results" role="status" aria-live="polite"></p><div class="battle-select"><label class="sr-only" for="battle-picker-sort">Sort names to add</label><select id="battle-picker-sort"><option value="rank">Rank &amp; HQ</option><option value="power">Power · high to low</option><option value="name">Name · A–Z</option></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+        </div>
+      </div>
+      <div class="battle-picker-scroll"><p id="battle-picker-empty" hidden></p><ul id="battle-picker-list" aria-label="Choose names to add"></ul></div>
+      <div class="battle-picker-footer"><p id="battle-picker-count" role="status" aria-live="polite">No names selected</p><div class="battle-dialog-actions"><button id="battle-picker-cancel" class="button secondary" type="button">Cancel</button><button id="battle-picker-submit" class="button primary" type="submit" disabled>Add names</button></div></div>
+    </form>
+  </dialog>
   <dialog id="battle-names-dialog" class="battle-dialog" aria-labelledby="battle-names-title"><form id="battle-names-form"><h2 id="battle-names-title">Add players</h2><label for="battle-names">Player names</label><textarea id="battle-names" rows="7" placeholder="One name per line" required></textarea><p class="field-help">Names are added to this battle’s roster.</p><div class="battle-dialog-actions"><button id="battle-names-cancel" class="button secondary" type="button">Cancel</button><button class="button primary" type="submit">Add players</button></div></form></dialog>
   <dialog id="battle-plan-dialog" class="battle-dialog" aria-labelledby="battle-plan-dialog-title" aria-describedby="battle-plan-dialog-help"><form id="battle-plan-form"><h2 id="battle-plan-dialog-title">New plan</h2><p id="battle-plan-dialog-help"></p><label for="battle-title">Plan title</label><input id="battle-title" maxlength="100" placeholder="Team B" autocomplete="off" required aria-describedby="battle-plan-error"><p id="battle-plan-error" class="error" role="alert" hidden></p><div class="battle-dialog-actions"><button id="battle-plan-cancel" class="button secondary" type="button">Cancel</button><button id="battle-plan-submit" class="button primary" type="submit">Create plan</button></div></form></dialog>
   <dialog id="battle-reset-dialog" class="battle-dialog" aria-labelledby="battle-reset-title"><form method="dialog"><h2 id="battle-reset-title">Clear this plan’s assignments?</h2><p>Players return to the pool. Your other saved plans stay as they are.</p><div class="battle-dialog-actions"><button value="cancel" class="button secondary">Cancel</button><button value="clear" class="button primary">Clear assignments</button></div></form></dialog>

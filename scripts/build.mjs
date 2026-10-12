@@ -7,6 +7,7 @@ const assets = [
   'data-transfer.js', 'data-transfer-ui.js', 'data-transfer.css',
   'index.html', 'styles.css', 'ui.js', 'placement.js', 'players.js', 'storage.js',
   'import-ui.js', 'lastwar-api.js', 'roster-cache.js', 'reorder-ui.js',
+  'roster-update.js', 'roster-update-ui.js',
   'placement-messages.js', 'free-formation.js', 'tile-placement.js', 'grid-layout.js', 'map-zoom.js', 'lifebloom-zombie.png',
   'battle.html', 'battle.css', 'battle-ui.js', 'battle-model.js', 'battle-render.js', 'battle-canyon.png', 'battle-desert.png',
 ];

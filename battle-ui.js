@@ -1,4 +1,6 @@
 import { setupDataTransfer } from './data-transfer-ui.js';
+import { setupRosterUpdate } from './roster-update-ui.js';
+import { refreshPlayerStats } from './roster-update.js';
 import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-power';
 import { drawBattle } from './battle-render.js?v=20261012-power';
 import { loadWorkspace } from './storage.js';
@@ -34,7 +36,10 @@ let suppressDragClick = false;
 let lastDraw = null;
 let renderVersion = 0;
 let exportUrl = null;
+let picker = null;
+let rosterUpdater = null;
 const images = new Map();
+const searchText = value => value.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
 
 function showError(message = '') { $('battle-error').textContent = message; $('battle-error').hidden = !message; }
 function announce(message) { $('battle-status').textContent = message; }
@@ -61,6 +66,7 @@ function syncSettings() {
   $('battle-show-power').checked = state.showPower;
 }
 function openedPlan(message) {
+  $('battle-picker-dialog').close();
   selectedPlayer = null; cancelDrag(); selectedZone = map().zones[0].id; lastDraw = null;
   poolOnly = true;
   $('battle-search').value = ''; $('battle-map-scroll').scrollTo(0, 0);
@@ -98,7 +104,7 @@ function renderSource() {
   const count = sourcePlayers().length;
   $('battle-copy-roster').disabled = !count;
   $('battle-copy-roster').textContent = count ? 'Use BaseGrid roster · ' + count : 'No saved BaseGrid roster';
-  $('battle-roster-help').textContent = count ? 'Copies players into this battle. No API calls.' : 'Add names here, or load a roster in BaseGrid at this same address.';
+  $('battle-roster-help').textContent = count ? 'Copying the BaseGrid roster uses no API calls.' : 'Add names here, or load a roster in BaseGrid at this same address.';
 }
 function selection() {
   const player = battlePlayer(plan(), selectedPlayer);
@@ -151,6 +157,77 @@ function playerButton(player, sourceZone = null) {
   button.addEventListener('click', () => choosePlayer(player.id, sourceZone));
   return button;
 }
+
+function fitPickerViewport() {
+  if (!$('battle-picker-dialog').open) return;
+  const viewport = window.visualViewport;
+  $('battle-picker-dialog').classList.toggle('compact-picker', (viewport?.height ?? window.innerHeight) < 540);
+  $('battle-picker-dialog').style.setProperty('--picker-height', (viewport?.height ?? window.innerHeight) + 'px');
+  $('battle-picker-dialog').style.setProperty('--picker-top', (viewport?.offsetTop ?? 0) + 'px');
+}
+function openPicker(zoneId) {
+  const zone = map().zones.find(zone => zone.id === zoneId);
+  if (!zone) return;
+  cancelDrag(); selectedPlayer = null; selectedFromZone = null; selectedZone = zone.id;
+  renderPlayers(); renderTeam(); selection();
+  picker = { zoneId, planId: plan().id, mapId: state.selectedMap, ids: new Set(), unassigned: false };
+  $('battle-picker-context').textContent = zone.name + ' · ' + plan().title;
+  $('battle-picker-search').value = '';
+  $('battle-picker-sort').value = state.playerSort;
+  renderPicker();
+  $('battle-picker-dialog').showModal(); fitPickerViewport();
+  // Keep the list visible on phones until the user chooses to open the keyboard.
+  (window.matchMedia('(max-width:650px)').matches ? $('battle-picker-title') : $('battle-picker-search')).focus({ preventScroll: true });
+}
+function pickerCount() {
+  const count = picker.ids.size;
+  $('battle-picker-count').textContent = count ? count + ' selected' : 'No names selected';
+  $('battle-picker-submit').textContent = count ? 'Add ' + count + (count === 1 ? ' name' : ' names') : 'Add names';
+  $('battle-picker-submit').disabled = !count;
+}
+function renderPicker() {
+  if (!picker) return;
+  const query = searchText($('battle-picker-search').value);
+  const already = new Set(plan().assignments[picker.zoneId] ?? []);
+  const entries = [ALLIES, ...sortBattlePlayers(plan().players, state.playerSort)].filter(player =>
+    searchText(player.name).includes(query) && (!picker.unassigned || (player.id === ALLIES.id ? !already.has(player.id) : !playerZones(plan(), player.id).length)));
+  $('battle-picker-all').setAttribute('aria-pressed', String(!picker.unassigned));
+  $('battle-picker-unassigned').setAttribute('aria-pressed', String(picker.unassigned));
+  $('battle-picker-results').textContent = entries.length + (entries.length === 1 ? ' name' : ' names');
+  $('battle-picker-empty').hidden = Boolean(entries.length);
+  $('battle-picker-empty').textContent = query ? 'No matching names. Try another search.' : 'Everyone is assigned. Choose All players to reuse a name.';
+  $('battle-picker-list').replaceChildren(...entries.map((player, index) => {
+    const row = make('li');
+    const label = make('label', 'battle-picker-row');
+    const added = already.has(player.id);
+    label.classList.toggle('already-added', added);
+    const checkbox = make('input'); checkbox.type = 'checkbox'; checkbox.value = player.id;
+    checkbox.checked = added || picker.ids.has(player.id); checkbox.disabled = added;
+    checkbox.setAttribute('aria-label', player.name);
+    checkbox.setAttribute('aria-describedby', 'battle-picker-detail-' + index);
+    const body = make('span', 'battle-picker-player');
+    body.append(make('span', 'battle-picker-name', player.name));
+    const details = make('span', 'battle-picker-details'); details.id = 'battle-picker-detail-' + index;
+    const meta = make('span', 'battle-player-meta');
+    if (player.group) { const badge = make('span', 'rank-badge', 'R' + player.group); badge.dataset.rank = player.group; meta.append(badge); }
+    if (player.hqLevel) meta.append(make('span', '', 'HQ ' + player.hqLevel));
+    if (player.id !== ALLIES.id) {
+      const power = make('span', '', 'Power ' + formatBattlePower(player.power)); power.title = powerDescription(player); meta.append(power);
+    }
+    if (meta.children.length) details.append(meta);
+    const locations = playerZones(plan(), player.id).map(id => map().zones.find(zone => zone.id === id).name);
+    details.append(make('span', 'battle-picker-location', added ? 'Already here' : locations.length ? 'Also in ' + locations.join(', ') : player.id === ALLIES.id ? 'Reusable label' : 'Unassigned'));
+    body.append(details); label.append(checkbox, body); row.append(label);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) picker.ids.add(player.id); else picker.ids.delete(player.id);
+      pickerCount();
+    });
+    return row;
+  }));
+  $('battle-picker-list').parentElement.scrollTop = 0;
+  pickerCount();
+}
+
 function clearDropTargets() { document.querySelectorAll('.drop-target').forEach(node => node.classList.remove('drop-target')); }
 function dragTarget(x, y) { return document.elementFromPoint(x, y)?.closest('.battle-zone, #battle-pool'); }
 function cancelDrag() {
@@ -204,8 +281,8 @@ document.addEventListener('click', event => { if (suppressDragClick) { suppressD
 function renderPlayers() {
   const roster = plan().players;
   const unassigned = roster.filter(player => !playerZones(plan(), player.id).length);
-  const query = $('battle-search').value.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
-  const matches = player => player.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().includes(query);
+  const query = searchText($('battle-search').value);
+  const matches = player => searchText(player.name).includes(query);
   const players = sortBattlePlayers(poolOnly ? unassigned : roster, state.playerSort).filter(matches);
   $('battle-player-count').textContent = roster.length + ' players';
   $('battle-unassigned-count').textContent = unassigned.length;
@@ -225,7 +302,8 @@ function renderTeam() {
   const select = $('battle-zone-select');
   select.replaceChildren(...map().zones.map(zone => { const option = make('option', '', zone.name); option.value = zone.id; return option; }));
   select.value = zone.id;
-  $('battle-team-help').textContent = ids.length ? 'Drag to move. Use × to remove only this assignment.' : 'This team is empty. Select a player, then choose this zone on the map.';
+  $('battle-team-add').setAttribute('aria-label', 'Add names to ' + zone.name);
+  $('battle-team-help').textContent = ids.length ? 'Drag to move. Use × to remove only this assignment.' : 'This team is empty. Tap + Names to choose players.';
   $('battle-team-list').replaceChildren(...ids.map((id, index) => {
     const player = battlePlayer(plan(), id);
     const row = make('li'); row.append(playerButton(player, zone.id));
@@ -256,7 +334,8 @@ function zoneControl(zone, canvas, snapshot) {
   container.classList.toggle('crowded', zone.text.overflow);
   const target = make('button', 'battle-zone-target'); target.type = 'button';
   target.setAttribute('aria-label', zone.name + ', ' + zone.names.length + ' assigned');
-  target.title = zone.name + ' · Select team or drop names here';
+  target.setAttribute('aria-haspopup', 'dialog');
+  target.title = zone.name + ' · Add names or drop players here';
   if (!zone.names.length) target.append(make('span', 'zone-placeholder', '+ Names'));
   container.append(target);
   if (state.showPower && zone.names.length) {
@@ -268,9 +347,9 @@ function zoneControl(zone, canvas, snapshot) {
     container.append(summary);
   }
   container.addEventListener('click', event => {
-    if (event.target.closest('.battle-chip')) return;
+    if (event.target.closest('.battle-chip, .battle-zone-add')) return;
     if (selectedPlayer) assign(selectedPlayer, zone.id, selectedFromZone);
-    else { selectedZone = zone.id; renderTeam(); announce(zone.name + ' · ' + zone.names.length + ' assigned.'); }
+    else openPicker(zone.id);
   });
   if (zone.names.length) {
     const list = make('ul', 'battle-zone-players'); list.setAttribute('aria-label', 'Players in ' + zone.name);
@@ -297,7 +376,11 @@ function zoneControl(zone, canvas, snapshot) {
       remove.addEventListener('click', () => assign(id, null, zone.id));
       chip.append(name, remove); list.append(chip);
     }
-    container.append(list);
+    const addItem = make('li', 'battle-zone-add-item');
+    const add = make('button', 'battle-zone-add', '+ Names'); add.type = 'button';
+    add.setAttribute('aria-label', 'Add names to ' + zone.name); add.setAttribute('aria-haspopup', 'dialog');
+    add.addEventListener('click', () => openPicker(zone.id));
+    addItem.append(add); list.append(addItem); container.append(list);
   }
   return container;
 }
@@ -308,7 +391,7 @@ async function renderMap() {
   const snapshot = structuredClone(plan());
   const focused = document.activeElement;
   const focusZone = focused.closest('.battle-zone')?.dataset.zone;
-  const focusClass = focused.matches('.battle-chip-remove') ? 'battle-chip-remove' : 'battle-chip-name';
+  const focusClass = ['battle-chip-remove', 'battle-chip-name', 'battle-zone-add', 'battle-zone-target'].find(name => focused.classList.contains(name)) ?? 'battle-zone-target';
   const focusIndex = focusZone ? [...focused.closest('.battle-zone').querySelectorAll('.' + focusClass)].indexOf(focused) : -1;
   const zoneScroll = new Map([...$('battle-zones').children].map(zone => [zone.dataset.zone, zone.querySelector('.battle-zone-players')?.scrollTop ?? 0]));
   $('battle-export').disabled = true;
@@ -344,7 +427,35 @@ function render() {
   $('battle-undo').disabled = !planHistory().length;
   $('battle-reset').disabled = !Object.values(plan().assignments).some(ids => ids.length);
   renderPlayers(); renderTeam(); selection(); renderMap();
+  rosterUpdater?.render();
 }
+
+$('battle-team-add').addEventListener('click', () => openPicker(selectedZone));
+for (const id of ['battle-picker-close', 'battle-picker-cancel']) $(id).addEventListener('click', () => $('battle-picker-dialog').close());
+$('battle-picker-dialog').addEventListener('close', () => { if (!$('battle-picker-dialog').open) picker = null; });
+$('battle-picker-search').addEventListener('input', renderPicker);
+$('battle-picker-all').addEventListener('click', () => { picker.unassigned = false; renderPicker(); });
+$('battle-picker-unassigned').addEventListener('click', () => { picker.unassigned = true; renderPicker(); });
+$('battle-picker-sort').addEventListener('change', () => {
+  state.playerSort = $('battle-picker-sort').value;
+  $('battle-sort').value = state.playerSort;
+  persist(); renderPlayers(); renderPicker();
+});
+$('battle-picker-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!picker || !picker.ids.size) return;
+  if (picker.planId !== plan().id || picker.mapId !== state.selectedMap) { $('battle-picker-dialog').close(); return; }
+  try {
+    const { zoneId, ids } = picker;
+    // Commit the entire selection as one saved change and one undo step.
+    const next = [...ids].reduce((draft, id) => assignBattlePlayer(draft, state.selectedMap, id, zoneId), plan());
+    $('battle-picker-dialog').close();
+    change(next, ids.size + (ids.size === 1 ? ' name added to ' : ' names added to ') + map().zones.find(zone => zone.id === zoneId).name + '.');
+  } catch (error) { $('battle-picker-count').textContent = error.message; }
+});
+window.visualViewport?.addEventListener('resize', fitPickerViewport);
+window.visualViewport?.addEventListener('scroll', fitPickerViewport);
+window.addEventListener('resize', fitPickerViewport);
 
 $('battle-map').addEventListener('change', () => {
   state = selectBattlePlan(state, $('battle-map').value);
@@ -453,3 +564,10 @@ for (const id of Object.keys(BATTLE_MAPS)) state.plans[id] = state.plans[id].map
 syncSettings(); renderSource(); persist(); render();
 
 setupDataTransfer();
+rosterUpdater = setupRosterUpdate({ getState: () => state, onUpdated(entry) {
+  state = loadBattles(window.localStorage);
+  // Undo still changes assignments, without bringing back pre-refresh stats.
+  for (const snapshots of history.values()) for (const snapshot of snapshots) snapshot.players = refreshPlayerStats(snapshot.players, entry.data);
+  syncSettings(); renderSource(); render();
+  announce('Roster updated. Assignments preserved.');
+} });
