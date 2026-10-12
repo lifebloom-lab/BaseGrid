@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatBattlePower, battleZonePower, battleZonePowerLabel } from '../battle-model.js';
+import { deleteBattlePlan, normalizeBattles } from '../battle-model.js';
 import { ALLIES, battlePlayer, battleCounts, playerZones, BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
@@ -139,6 +140,45 @@ test('renaming keeps the plan identity and assignments, and duplicate titles can
   assert.equal(state.plans.canyon[1].title, 'Team B');
   assert.throws(() => selectBattlePlan(state, 'canyon', 'missing'));
   assert.throws(() => createBattlePlan(state, 'Other', { id }));
+});
+
+test('deleting a selected plan opens its neighbor and preserves every other plan, event and roster', () => {
+  let state = updateBattlePlan(emptyBattles(), assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power'));
+  state = createBattlePlan(state, 'Team B', { id: 'team-b', duplicate: true });
+  state = createBattlePlan(state, 'Team C', { id: 'team-c', duplicate: true });
+  state = selectBattlePlan(state, 'canyon', 'team-b');
+  const before = structuredClone(state);
+  const removed = deleteBattlePlan(state);
+  assert.deepEqual(removed.plans.canyon, [before.plans.canyon[0], before.plans.canyon[2]]);
+  assert.equal(currentBattle(removed).id, 'team-c');
+  assert.deepEqual(removed.plans.desert, before.plans.desert);
+  assert.equal(removed.selectedPlans.desert, before.selectedPlans.desert);
+  assert.deepEqual(state, before, 'deletion does not mutate the previous snapshot');
+  const storage = memoryStorage([['basegrid.workspace.v1', 'keep formation'], ['basegrid.rosters.v1', 'keep roster']]);
+  saveBattles(storage, removed);
+  assert.deepEqual(loadBattles(storage), normalizeBattles(removed));
+  assert.equal(storage.getItem('basegrid.workspace.v1'), 'keep formation');
+  assert.equal(storage.getItem('basegrid.rosters.v1'), 'keep roster');
+  const last = deleteBattlePlan(removed);
+  assert.equal(currentBattle(last).id, before.plans.canyon[0].id, 'the previous plan opens when deleting the last list item');
+  assert.equal(currentBattle(deleteBattlePlan(state, 'team-c')).id, 'team-b', 'deleting a different plan keeps the selection');
+});
+
+test('deleting the only plan creates a fresh empty Team A without reviving the deleted identity or assignments', () => {
+  let state = selectBattlePlan(emptyBattles(), 'desert');
+  state = updateBattlePlan(state, { ...assignBattlePlayer(mergeBattlePlayers(emptyBattle(), roster), 'desert', 'lastwar:1', 'silo'), title: 'Weekly team' });
+  const oldId = currentBattle(state).id;
+  const removed = deleteBattlePlan(state, oldId, { replacementId: 'fresh-desert' });
+  assert.deepEqual(currentBattle(removed), { id: 'fresh-desert', ...emptyBattle() });
+  assert.deepEqual(removed.plans.canyon, state.plans.canyon);
+  assert.equal(removed.selectedMap, 'desert');
+  const storage = memoryStorage();
+  saveBattles(storage, removed);
+  assert.deepEqual(loadBattles(storage), normalizeBattles(removed));
+  assert.throws(() => deleteBattlePlan(state, 'missing'), /not be found/);
+  assert.throws(() => deleteBattlePlan(state, oldId, { replacementId: state.plans.canyon[0].id }), /identity/);
+  assert.equal(currentBattle(state).title, 'Weekly team');
+  assert.deepEqual(currentBattle(state).assignments.silo, ['lastwar:1']);
 });
 
 test('invalid libraries preserve existing data instead of silently falling back to old drafts', () => {

@@ -1,7 +1,7 @@
 import { setupDataTransfer } from './data-transfer-ui.js';
 import { setupRosterUpdate } from './roster-update-ui.js';
 import { refreshPlayerStats } from './roster-update.js';
-import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-power';
+import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-delete';
 import { drawBattle } from './battle-render.js?v=20261012-room';
 import { loadWorkspace } from './storage.js';
 import { playersFromDraft } from './players.js';
@@ -26,6 +26,7 @@ const planHistory = () => {
   return history.get(plan().id);
 };
 let planAction = 'new';
+let planToDelete = null;
 let selectedPlayer = null;
 let selectedFromZone = null;
 let selectedZone = map().zones[0].id;
@@ -65,13 +66,13 @@ function syncSettings() {
   $('battle-sort').value = state.playerSort;
   $('battle-show-power').checked = state.showPower;
 }
-function openedPlan(message) {
+function openedPlan(message, { save = true } = {}) {
   $('battle-picker-dialog').close();
   selectedPlayer = null; cancelDrag(); selectedZone = map().zones[0].id; lastDraw = null;
   poolOnly = true;
   $('battle-search').value = ''; $('battle-map-scroll').scrollTo(0, 0);
   $('battle-zones').replaceChildren(); $('battle-canvas').width = 0;
-  syncSettings(); persist(); render();
+  syncSettings(); if (save) persist(); render();
   announce(message ?? 'Opened ' + plan().title + ' · ' + map().name + '.');
 }
 function openPlanDialog(action) {
@@ -467,6 +468,37 @@ $('battle-plan').addEventListener('change', () => {
   openedPlan();
 });
 for (const action of ['new', 'duplicate', 'rename']) $('battle-plan-' + action).addEventListener('click', () => openPlanDialog(action));
+$('battle-plan-delete').addEventListener('click', () => {
+  planToDelete = { id: plan().id, mapId: state.selectedMap, title: plan().title };
+  $('battle-delete-name').textContent = plan().title + ' · ' + map().name;
+  $('battle-delete-last').hidden = state.plans[state.selectedMap].length !== 1;
+  $('battle-delete-error').hidden = true;
+  $('battle-delete-dialog').showModal(); $('battle-delete-cancel').focus();
+});
+$('battle-delete-cancel').addEventListener('click', () => $('battle-delete-dialog').close());
+$('battle-delete-dialog').addEventListener('close', () => { planToDelete = null; });
+$('battle-delete-form').addEventListener('submit', event => {
+  event.preventDefault();
+  try {
+    if (!planToDelete || planToDelete.id !== plan().id || planToDelete.mapId !== state.selectedMap) throw new Error('The selected plan changed. Close this panel and try again.');
+    if (!storageReady || JSON.stringify(normalizeBattles(state)) !== JSON.stringify(loadBattles(window.localStorage))) {
+      throw new Error('Your saved plans have changed or are unavailable. Reload before deleting a plan.');
+    }
+    const next = deleteBattlePlan(state, planToDelete.id);
+    // Save first: a failed write must leave the current plan and its history intact.
+    try { saveBattles(window.localStorage, next); }
+    catch { throw new Error('The plan could not be deleted. Your plans are kept. Check browser storage and try again.'); }
+    const title = planToDelete.title;
+    history.delete(planToDelete.id);
+    state = next;
+    $('battle-delete-dialog').close();
+    $('battle-save').textContent = 'Saved on this device';
+    openedPlan('Deleted “' + title + '”. Opened ' + plan().title + '.', { save: false });
+    $('battle-plan').focus();
+  } catch (error) {
+    $('battle-delete-error').textContent = error.message; $('battle-delete-error').hidden = false;
+  }
+});
 $('battle-plan-cancel').addEventListener('click', () => $('battle-plan-dialog').close());
 $('battle-title').addEventListener('input', () => {
   $('battle-title').removeAttribute('aria-invalid'); $('battle-plan-error').hidden = true;
@@ -560,6 +592,14 @@ $('battle-export-dialog').addEventListener('close', () => {
   if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
 });
 window.addEventListener('focus', renderSource);
+window.addEventListener('storage', event => {
+  if (event.key !== BATTLE_KEY || !event.newValue) return;
+  try {
+    const saved = normalizeBattles(JSON.parse(event.newValue));
+    // Another open battle tab must not save a deleted plan back into the library.
+    if (Object.keys(BATTLE_MAPS).some(id => state.plans[id].some(plan => !saved.plans[id].some(other => other.id === plan.id)))) window.location.reload();
+  } catch { /* Invalid external data is handled by the existing storage safeguards. */ }
+});
 // Recalculate card space when the map is enlarged or its viewport changes.
 let mapDisplayWidth = 0;
 new ResizeObserver(([entry]) => {

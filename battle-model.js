@@ -213,6 +213,20 @@ export function createBattlePlan(state, title, { duplicate = false, id = crypto.
     plans: { ...state.plans, [mapId]: [...state.plans[mapId], created] } };
 }
 
+export function deleteBattlePlan(state, planId = state.selectedPlans[state.selectedMap], { replacementId = crypto.randomUUID() } = {}) {
+  const mapId = state.selectedMap;
+  const previous = state.plans[mapId];
+  const index = previous.findIndex(plan => plan.id === planId);
+  if (index < 0) throw new Error('This plan could not be found.');
+  let plans = previous.filter(plan => plan.id !== planId);
+  if (!plans.length) {
+    if (!replacementId || Object.values(state.plans).some(plans => plans.some(plan => plan.id === replacementId))) throw new Error('Invalid plan identity.');
+    plans = [{ id: replacementId, ...emptyBattle() }];
+  }
+  const selectedId = state.selectedPlans[mapId] === planId ? plans[Math.min(index, plans.length - 1)].id : state.selectedPlans[mapId];
+  return { ...state, plans: { ...state.plans, [mapId]: plans }, selectedPlans: { ...state.selectedPlans, [mapId]: selectedId } };
+}
+
 export function mergeBattlePlayers(plan, incoming) {
   const players = new Map(plan.players.map(player => [player.id, player]));
   for (const player of incoming) players.set(player.id, cleanBattlePlayer(player));
