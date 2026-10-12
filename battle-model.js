@@ -339,7 +339,7 @@ export function layoutNames(names, width, maxHeight, measure, { maxFont = 38, mi
 
 // These bounds are also the drop targets. Desert card limits reserve clear space
 // before the next building/label; Canyon names stay inside existing panels.
-export function layoutBattleZones(map, plan, width, height, measure) {
+export function layoutBattleZones(map, plan, width, height, measure, { minimumCardBody = 0 } = {}) {
   const players = new Map(plan.players.map(player => [player.id, player]));
   players.set(ALLIES.id, ALLIES);
   return map.zones.map(zone => {
@@ -354,7 +354,9 @@ export function layoutBattleZones(map, plan, width, height, measure) {
     const text = layoutNames(names, w - padding * 2, maxHeight - headerHeight - padding * 2, measure,
       { maxFont: zone.card ? 36 * scale : 38, minFont: zone.card ? 28 * scale : 24,
         minHeight: minBodyHeight, maxColumns: zone.card ? 2 : 4 });
-    const h = headerHeight + padding * 2 + text.height;
+    // Editing controls need more space than the names-only PNG. Keep the text
+    // layout for export checks, but allow a taller interactive Desert card.
+    const h = headerHeight + Math.max(padding * 2 + text.height, zone.card ? minimumCardBody : 0);
     return { ...zone, names, x, y, w, h, headerHeight, padding, text };
   });
 }

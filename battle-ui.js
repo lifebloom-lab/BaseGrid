@@ -2,7 +2,7 @@ import { setupDataTransfer } from './data-transfer-ui.js';
 import { setupRosterUpdate } from './roster-update-ui.js';
 import { refreshPlayerStats } from './roster-update.js';
 import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-power';
-import { drawBattle } from './battle-render.js?v=20261012-power';
+import { drawBattle } from './battle-render.js?v=20261012-room';
 import { loadWorkspace } from './storage.js';
 import { playersFromDraft } from './players.js';
 import { createRosterCache } from './roster-cache.js';
@@ -388,6 +388,7 @@ function zoneControl(zone, canvas, snapshot) {
 async function renderMap() {
   const version = ++renderVersion;
   const template = map();
+  $('battle-map-stage').dataset.map = template.id;
   const snapshot = structuredClone(plan());
   const focused = document.activeElement;
   const focusZone = focused.closest('.battle-zone')?.dataset.zone;
@@ -399,7 +400,7 @@ async function renderMap() {
   try {
     const image = await getImage(template);
     if (version !== renderVersion) return;
-    lastDraw = drawBattle(template, snapshot, image, { editing: true });
+    lastDraw = drawBattle(template, snapshot, image, { editing: true, displayWidth: $('battle-map-stage').clientWidth });
     const canvas = $('battle-canvas');
     canvas.width = lastDraw.canvas.width; canvas.height = lastDraw.canvas.height;
     canvas.getContext('2d').drawImage(lastDraw.canvas, 0, 0);
@@ -559,6 +560,14 @@ $('battle-export-dialog').addEventListener('close', () => {
   if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
 });
 window.addEventListener('focus', renderSource);
+// Recalculate card space when the map is enlarged or its viewport changes.
+let mapDisplayWidth = 0;
+new ResizeObserver(([entry]) => {
+  const width = entry.contentRect.width;
+  if (width === mapDisplayWidth) return;
+  mapDisplayWidth = width;
+  renderMap();
+}).observe($('battle-map-stage'));
 const savedPlayers = [...sourcePlayers(), ...createRosterCache().listRosters().flatMap(roster => roster.data)];
 for (const id of Object.keys(BATTLE_MAPS)) state.plans[id] = state.plans[id].map(plan => restoreBattlePowers(plan, savedPlayers));
 syncSettings(); renderSource(); persist(); render();

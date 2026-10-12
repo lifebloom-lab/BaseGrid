@@ -1,4 +1,4 @@
-import { battleCounts, layoutBattleZones } from './battle-model.js';
+import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261012-room';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const HEADER = 108;
@@ -58,13 +58,15 @@ function drawDesertTitle(ctx, width, height) {
   ctx.restore();
 }
 
-export function drawBattle(map, plan, image, { editing = false } = {}) {
+export function drawBattle(map, plan, image, { editing = false, displayWidth = image.naturalWidth } = {}) {
   const width = image.naturalWidth;
   const height = image.naturalHeight;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const measure = (name, size) => { ctx.font = '600 ' + size + 'px ' + FONT; return ctx.measureText(name).width; };
-  const zones = layoutBattleZones(map, plan, width, height, measure).map(zone => ({ ...zone, y: zone.y + HEADER }));
+  // Three capsule rows, the power summary, and the add button in screen pixels.
+  const minimumCardBody = editing ? 120 * width / Math.max(1, displayWidth) : 0;
+  const zones = layoutBattleZones(map, plan, width, height, measure, { minimumCardBody }).map(zone => ({ ...zone, y: zone.y + HEADER }));
   const counts = battleCounts(plan);
   canvas.width = width;
   canvas.height = height + HEADER;

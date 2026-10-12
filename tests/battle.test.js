@@ -394,6 +394,27 @@ test('wide Canyon panels retain room for a larger team without spilling outside 
   }
 });
 
+test('Desert editing cards reserve three capsule rows without overlapping cards or enlarging PNG layouts', () => {
+  const map = BATTLE_MAPS.desert;
+  const players = ['Cocodrilomingo', 'BlackDemonGT', 'Captain Northstar'].map((name, id) => ({ id: String(id), name }));
+  const plan = { ...emptyBattle(), players, assignments: Object.fromEntries(map.zones.map(zone => [zone.id, players.map(player => player.id)])) };
+  const measure = (name, size) => name.length * size * .55;
+  const exported = layoutBattleZones(map, plan, 2496, 2524, measure);
+  for (const displayWidth of [1280, 1400, 1800]) {
+    const edited = layoutBattleZones(map, plan, 2496, 2524, measure, { minimumCardBody: 120 * 2496 / displayWidth });
+    edited.forEach((zone, index) => {
+      assert.ok((zone.h - zone.headerHeight) * displayWidth / 2496 >= 120 - .001);
+      assert.deepEqual(zone.text, exported[index].text, 'editing space does not change PNG text or overflow checks');
+      assert.deepEqual(zone.names, players.map(player => player.name));
+      for (const other of edited.filter(other => other.id !== zone.id)) {
+        assert.ok(zone.x + zone.w <= other.x || other.x + other.w <= zone.x || zone.y + zone.h <= other.y || other.y + other.h <= zone.y,
+          zone.id + '/' + other.id + ' at ' + displayWidth);
+      }
+    });
+  }
+  assert.deepEqual(layoutBattleZones(map, plan, 2496, 2524, measure), exported);
+});
+
 test('all image zones are unique, normalized, and inside their supplied template', () => {
   for (const map of Object.values(BATTLE_MAPS)) {
     assert.equal(new Set(map.zones.map(zone => zone.id)).size, map.zones.length);
