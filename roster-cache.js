@@ -65,18 +65,25 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
   const entryKey = (kind, id) => `${kind}:${String(id).toLowerCase()}`;
   const copy = entry => entry ? structuredClone(entry) : null;
 
-  function read() {
-    if (loaded) return;
+  function read(force = false) {
+    if (loaded && !force) return;
     loaded = true;
     try {
       const raw = getStorage().getItem(ROSTER_CACHE_KEY);
-      if (raw === null) return;
-      const saved = JSON.parse(raw);
+      const saved = raw === null ? { version: 1, entries: [] } : JSON.parse(raw);
       if (saved?.version !== 1 || !Array.isArray(saved.entries)) throw new Error('Invalid saved library.');
+      const latest = new Map();
       for (const item of saved.entries) {
         const entry = cleanEntry(item);
-        entries.set(entryKey(entry.kind, entry.id), { ...entry, persisted: true });
+        latest.set(entryKey(entry.kind, entry.id), { ...entry, persisted: true });
       }
+      // Reopening import sees updates from other panels, while keeping lookups
+      // that could only be stored in memory during this visit.
+      for (const [key, entry] of entries) {
+        if (!entry.persisted && (!latest.has(key) || entry.savedAt > latest.get(key).savedAt)) latest.set(key, entry);
+      }
+      entries.clear();
+      for (const [key, entry] of latest) entries.set(key, entry);
     } catch {
       onWarning('Some saved lookups could not be opened. Any players loaded now will still be kept for this visit.');
     }
@@ -128,6 +135,7 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
   }
 
   return {
+    reload: () => read(true),
     listRosters() {
       read();
       return [...entries.values()].filter(entry => entry.kind === 'roster')

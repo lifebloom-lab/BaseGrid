@@ -1,5 +1,6 @@
 import { setupDataTransfer } from './data-transfer-ui.js';
 import { setupRosterUpdate } from './roster-update-ui.js';
+import { setupRosterImport } from './import-ui.js?v=20261012-battle-import';
 import { refreshPlayerStats } from './roster-update.js';
 import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-delete';
 import { drawBattle } from './battle-render.js?v=20261012-room';
@@ -105,7 +106,7 @@ function renderSource() {
   const count = sourcePlayers().length;
   $('battle-copy-roster').disabled = !count;
   $('battle-copy-roster').textContent = count ? 'Use BaseGrid roster · ' + count : 'No saved BaseGrid roster';
-  $('battle-roster-help').textContent = count ? 'Copying the BaseGrid roster uses no API calls.' : 'Add names here, or load a roster in BaseGrid at this same address.';
+  $('battle-roster-help').textContent = count ? 'Copying the BaseGrid roster uses no API calls.' : 'Import your alliance or add names manually.';
 }
 function selection() {
   const player = battlePlayer(plan(), selectedPlayer);
@@ -613,6 +614,14 @@ for (const id of Object.keys(BATTLE_MAPS)) state.plans[id] = state.plans[id].map
 syncSettings(); renderSource(); persist(); render();
 
 setupDataTransfer();
+setupRosterImport({
+  hasRoster: () => plan().players.length > 0,
+  destinationHelp: 'Players will be added to this plan’s roster.',
+  onImport(players) {
+    change(mergeBattlePlayers(plan(), players), 'Roster imported. Existing assignments kept.');
+  },
+});
+$('import-dialog').addEventListener('close', () => rosterUpdater?.render());
 rosterUpdater = setupRosterUpdate({ getState: () => state, onUpdated(entry) {
   state = loadBattles(window.localStorage);
   // Undo still changes assignments, without bringing back pre-refresh stats.

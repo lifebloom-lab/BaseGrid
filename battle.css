@@ -33,7 +33,7 @@
 .battle-section-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
 .battle-section-heading span { color:var(--muted); font-size:.8rem; }
 #battle-copy-roster { width:100%; font-size:.82rem; }
-#battle-update-roster { width:100%; margin-top:8px; min-height:44px; font-size:.82rem; }
+#battle-update-roster, .battle-app #open-import { width:100%; margin-top:8px; min-height:44px; font-size:.82rem; }
 #battle-roster-updated { font-size:.7rem; }
 #battle-add-names { width:100%; }
 #battle-roster-help { margin:0 0 14px; }

@@ -64,6 +64,42 @@ test('only an explicit refresh replaces a saved roster and consumes another API 
   assert.equal((await cache.loadRoster(id)).data[0].hqLevel, 32);
 });
 
+test('reopening import reads roster updates made by another panel without an API call', async () => {
+  const storage = memoryStorage();
+  let calls = 0;
+  const cache = createRosterCache({ getStorage: () => storage, now: () => 1000,
+    getMembers: async () => { calls++; return players; } });
+  await cache.loadRoster(id);
+  const updated = players.map(player => ({ ...player, power: 1200 }));
+  const otherPanel = createRosterCache({ getStorage: () => storage, now: () => 2000,
+    getMembers: async () => updated });
+  await otherPanel.loadRoster(id, {}, { refresh: true });
+  await otherPanel.loadRoster(otherId);
+  cache.reload();
+  assert.deepEqual((await cache.loadRoster(id)).data, updated);
+  assert.equal(cache.listRosters().length, 2);
+  assert.equal(calls, 1);
+  // Updating context must not write the old roster stats back over fresh data.
+  await cache.loadRoster(id, {}, { context });
+  assert.equal(createRosterCache({ getStorage: () => storage }).getRoster(id).data[0].power, 1200);
+});
+
+test('reopening import preserves unsaved lookups when storage is full or unavailable', async () => {
+  const storage = memoryStorage();
+  storage.setItem = () => { throw new Error('Storage full'); };
+  let calls = 0;
+  const cache = createRosterCache({ getStorage: () => storage,
+    getMembers: async () => { calls++; return players; } });
+  await cache.loadRoster(id);
+  cache.reload();
+  assert.deepEqual((await cache.loadRoster(id)).data, players);
+  assert.equal(cache.getRoster(id).persisted, false);
+  storage.getItem = () => { throw new Error('Storage denied'); };
+  cache.reload();
+  assert.deepEqual((await cache.loadRoster(id)).data, players);
+  assert.equal(calls, 1);
+});
+
 test('failed or cancelled refreshes keep the last saved copy usable', async () => {
   const storage = memoryStorage();
   let fail = false;

@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261008-search">
-  <link rel="stylesheet" href="./battle.css?v=20261012-delete">
-  <script type="module" src="./battle-ui.js?v=20261012-delete"></script>
+  <link rel="stylesheet" href="./battle.css?v=20261012-battle-import">
+  <script type="module" src="./battle-ui.js?v=20261012-battle-import"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=1">
 </head>
 <body class="battle-app">
@@ -27,10 +27,11 @@
         <section id="battle-pool" class="panel battle-roster" aria-labelledby="battle-roster-title">
           <div class="battle-section-heading"><h2 id="battle-roster-title">Players</h2><span id="battle-player-count"></span></div>
           <button id="battle-copy-roster" class="button secondary" type="button">Use BaseGrid roster</button>
+          <button id="open-import" class="button secondary" type="button" aria-haspopup="dialog">Import roster</button>
           <button id="battle-update-roster" class="button secondary" type="button" aria-haspopup="dialog">Update roster</button>
           <p id="battle-roster-updated" class="field-help" hidden></p>
           <button id="battle-add-names" class="text-button" type="button">＋ Add names</button>
-          <p id="battle-roster-help" class="field-help">Copy your saved roster or add names manually.</p>
+          <p id="battle-roster-help" class="field-help">Import your alliance or add names manually.</p>
           <label class="sr-only" for="battle-search">Search battle players</label><input id="battle-search" type="search" placeholder="Search players…" autocomplete="off">
           <div class="battle-pool-sort"><label for="battle-sort">Sort by</label><div class="battle-select"><select id="battle-sort"><option value="rank">Rank &amp; HQ</option><option value="power">Power · high to low</option><option value="name">Name · A–Z</option></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
           <div class="battle-pool-tabs" role="group" aria-label="Player list"><button type="button" id="battle-unassigned-tab" aria-pressed="true">Unassigned <span id="battle-unassigned-count">0</span></button><button type="button" id="battle-all-tab" aria-pressed="false">All players</button></div>
@@ -60,6 +61,76 @@
       </section>
     </div>
   </main>
+  <dialog id="import-dialog" class="import-dialog" aria-labelledby="import-title" aria-describedby="import-description">
+    <h2 id="import-title">Import roster</h2>
+    <p id="import-description">Find your alliance, then review its players.</p>
+    <ol id="import-steps" class="import-steps" aria-label="Import progress">
+      <li data-step="1" aria-current="step"><span>1</span> Server</li><li data-step="2"><span>2</span> Alliance</li><li data-step="3"><span>3</span> Review</li>
+    </ol>
+    <form id="import-form" novalidate>
+      <p id="import-cache-warning" class="notice" role="status" hidden></p>
+      <section id="saved-rosters" aria-labelledby="saved-roster-title" hidden>
+        <h3 id="saved-roster-title" tabindex="-1">Use a saved roster</h3>
+        <div class="import-field"><label for="saved-roster">Saved roster</label><select id="saved-roster"></select><p class="field-help">No API key or API calls needed.</p></div>
+        <button id="find-another-alliance" class="button secondary" type="button">Find an alliance</button>
+      </section>
+      <div id="import-context" class="import-context" hidden>
+        <div><span id="import-server-summary"></span><button id="change-import-server" class="text-button" type="button">Change server</button></div>
+        <div id="import-alliance-summary-row" hidden><span id="import-alliance-summary"></span><button id="change-import-alliance" class="text-button" type="button">Change alliance</button></div>
+      </div>
+      <section id="import-server-step" aria-labelledby="import-server-title">
+        <h3 id="import-server-title" tabindex="-1">Find your server</h3>
+        <div class="import-field"><label for="import-server">Server number</label><input id="import-server" type="number" inputmode="numeric" min="1" max="9999999999" step="1" placeholder="e.g. 1786" required></div>
+        <div id="import-credentials-1">
+          <div id="import-key-field" class="import-field">
+            <label for="import-key">LastWarTools API key</label>
+            <input id="import-key" type="password" autocomplete="off" spellcheck="false" maxlength="1024" required aria-describedby="import-key-help">
+            <p id="import-key-help" class="field-help">Used for lookups. Never saved. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key</a></p>
+          </div>
+        </div>
+      </section>
+      <section id="import-alliance-step" aria-labelledby="import-alliance-title" hidden>
+        <h3 id="import-alliance-title" tabindex="-1">Choose your alliance</h3>
+        <div id="import-selection" class="import-field">
+          <label for="import-alliance">Alliance</label><select id="import-alliance"><option value="">Choose an alliance…</option></select>
+        </div>
+        <p id="import-no-alliances" class="field-help" hidden>No alliances found. Check the server or enter an alliance ID.</p>
+        <details id="import-direct" class="import-direct">
+          <summary>Can’t find your alliance?</summary>
+          <p class="field-help">Up to 200 ranked alliances per server.</p>
+          <p id="alliance-cache-status" class="field-help"></p>
+          <button id="refresh-alliances" class="text-button" type="button">Refresh alliances · 1 API call</button>
+          <div class="import-field"><label for="import-alliance-id">Alliance ID</label><input id="import-alliance-id" type="text" autocomplete="off" spellcheck="false" maxlength="32" pattern="[a-fA-F0-9]{32}" aria-describedby="import-id-help"><p id="import-id-help" class="field-help">Enter its 32-character ID from LastWarTools.</p></div>
+        </details>
+        <div id="import-credentials-2"></div>
+      </section>
+      <section id="import-preview" aria-labelledby="import-preview-title" hidden>
+        <h3 id="import-preview-title" tabindex="-1">Review players</h3>
+        <p id="roster-cache-status" class="field-help"></p>
+        <button id="refresh-roster" class="text-button" type="button">Refresh players · 1 API call</button>
+        <div id="import-credentials-3"></div>
+        <details id="import-player-details" class="import-direct">
+          <summary id="import-list-summary">View players</summary>
+          <div class="import-field"><label for="import-order">Player order</label><select id="import-order"><option value="power">Power · highest first</option><option value="name">Name · A–Z</option></select></div>
+          <ol id="import-preview-list" class="import-preview-list" tabindex="0" aria-label="Players in import order"></ol>
+          <p id="import-metadata-note" class="field-help" hidden></p>
+        </details>
+        <p id="import-replace-note" class="field-help" hidden>Existing players and assignments are kept.</p>
+      </section>
+      <p id="import-error" class="error" role="alert" hidden></p>
+      <p id="import-status" class="sr-only" role="status" aria-live="polite"></p>
+      <p id="import-action-help" class="field-help import-action-help">Saved results first. A new search uses 1 API call.</p>
+      <div class="import-dialog-footer">
+        <button id="import-back" class="button secondary" type="button" hidden>Back</button>
+        <div class="import-next-actions">
+          <button id="cancel-import" class="button secondary" type="button">Cancel</button>
+          <button id="find-alliances" class="button primary" type="submit">Find alliances</button>
+          <button id="load-roster" class="button primary" type="submit" hidden>Load players</button>
+          <button id="confirm-import" class="button primary" type="submit" hidden>Add players</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
   <dialog id="battle-roster-update-dialog" class="battle-dialog battle-roster-update" aria-labelledby="battle-roster-update-title">
     <form id="battle-roster-update-form">
       <h2 id="battle-roster-update-title" tabindex="-1">Update roster</h2>
@@ -73,7 +144,7 @@
         <p id="battle-roster-update-key-help" class="field-help">Used for this update. Never saved. <a href="https://lastwar.tools/" target="_blank" rel="noopener noreferrer">Get an API key ↗</a></p>
         <p class="battle-roster-update-cost">1 API call · Saved locally after updating</p>
       </div>
-      <p id="battle-roster-update-empty" hidden>No imported alliance is linked to these players. <a href="./">Import your alliance in BaseGrid</a>, then use its roster here.</p>
+      <p id="battle-roster-update-empty" hidden>No imported alliance is linked to these players. Use Import roster to add your alliance first.</p>
       <p id="battle-roster-update-error" class="error" role="alert" hidden></p>
       <p id="battle-roster-update-status" role="status" aria-live="polite" hidden></p>
       <div class="battle-dialog-actions"><button id="battle-roster-update-close" class="button secondary" type="button">Cancel</button><button id="battle-roster-update-submit" class="button primary" type="submit">Update roster</button></div>

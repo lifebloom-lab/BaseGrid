@@ -1,9 +1,10 @@
 import { orderPlayers } from './lastwar-api.js';
 import { playerDetails, rosterContextLabels } from './players.js';
-import { createRosterCache } from './roster-cache.js';
+import { createRosterCache } from './roster-cache.js?v=20261012-battle-import';
 
 /** A single active step; credentials only live while the dialog is open. */
-export function setupRosterImport({ onImport, hasRoster, previousPlayers, previousContext }) {
+export function setupRosterImport({ onImport, hasRoster, previousPlayers, previousContext,
+  destinationHelp = 'Players will be added to your base pool.' }) {
   const byId = id => document.getElementById(id);
   const dialog = byId('import-dialog');
   const form = byId('import-form');
@@ -90,7 +91,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     message('import-action-help', step === 1 ? cachedServer
       ? 'Saved alliances available. No API call.' : 'Saved results first. A new search uses 1 API call.'
       : step === 2 && id ? cachedRoster ? 'Saved players available. No API call.' : 'Loading players uses 1 API call.'
-      : step === 3 ? 'Players will be added to your base pool.' : '');
+      : step === 3 ? destinationHelp : '');
   }
 
   function cancelRequest() {
@@ -258,6 +259,7 @@ export function setupRosterImport({ onImport, hasRoster, previousPlayers, previo
     fromSaved = false;
     byId('import-direct').open = false;
     byId('import-player-details').open = false;
+    cache.reload();
     renderSavedRosters();
     goTo(savedRosters.length ? 'saved' : 1, false);
     dialog.showModal();
