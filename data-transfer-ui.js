@@ -1,4 +1,6 @@
 import { DATA_IMPORT_KEY, MAX_BACKUP_BYTES, exportDataBackup, parseDataBackup, prepareDataImport, commitDataImport } from './data-transfer.js';
+import { ROSTER_CACHE_KEY, createRosterCache, prepareRosterRemoval, commitRosterRemoval } from './roster-cache.js?v=20261012-remove-roster';
+import { rosterContextLabels } from './players.js';
 
 export function setupDataTransfer() {
   const dialog = document.createElement('dialog');
@@ -6,9 +8,15 @@ export function setupDataTransfer() {
   dialog.setAttribute('aria-labelledby', 'data-title');
   // Static interface markup only; file names, plan titles and errors use textContent.
   dialog.innerHTML = `
-    <h2 id="data-title" tabindex="-1">Export & import data</h2>
-    <p>Share editable plans or keep a backup. No API key needed.</p>
+    <h2 id="data-title" tabindex="-1">Your data</h2>
+    <p id="data-description">Manage saved rosters, share plans, or keep a backup.</p>
     <div id="data-options">
+      <section id="data-rosters-section" class="data-section" aria-labelledby="data-rosters-title">
+        <h3 id="data-rosters-title" tabindex="-1">Saved rosters</h3>
+        <p>Remove alliances you no longer need. Your plans are kept.</p>
+        <p id="data-rosters-empty" hidden>No saved rosters.</p>
+        <ul id="data-roster-list" aria-label="Saved alliance rosters"></ul>
+      </section>
       <section id="data-export-section" class="data-section" aria-labelledby="data-export-title">
         <h3 id="data-export-title">Export all data</h3>
         <p>Saved battle plans, player details, your formation, and saved rosters.</p>
@@ -31,10 +39,18 @@ export function setupDataTransfer() {
         </div>
       </form>
     </div>
+    <form id="data-remove-roster-form" hidden aria-labelledby="data-remove-title" aria-describedby="data-remove-name data-remove-details data-remove-help">
+      <h3 id="data-remove-title">Remove saved roster?</h3>
+      <p id="data-remove-name"></p>
+      <p id="data-remove-details"></p>
+      <p id="data-remove-help">This removes the saved roster from this browser. Players already in your plans and their assignments are kept.</p>
+    </form>
     <p id="data-error" role="alert" hidden></p>
     <p id="data-status" role="status" aria-live="polite" hidden></p>
     <div class="data-footer">
       <button id="data-close" class="button secondary" type="button">Close</button>
+      <button id="data-remove-cancel" class="button secondary" type="button" hidden>Cancel</button>
+      <button id="data-remove-confirm" class="button data-danger" type="submit" form="data-remove-roster-form" hidden>Remove roster</button>
       <button id="data-import-confirm" class="button primary" type="submit" form="data-import-form" hidden>Import data</button>
     </div>`;
   document.body.append(dialog);
@@ -42,19 +58,72 @@ export function setupDataTransfer() {
   let exportUrl = null;
   let backup = null;
   let prepared = null;
-  let imported = false;
+  let reloadOnClose = false;
+  let removal = null;
   let reading = 0;
   const count = (number, noun) => `${number} ${noun}${number === 1 ? '' : 's'}`;
   function showReview(visible) {
     $('data-import-form').hidden = !visible;
     $('data-import-confirm').hidden = !visible;
     $('data-export-section').hidden = visible;
+    $('data-rosters-section').hidden = visible;
     $('data-file-help').hidden = visible;
   }
   function error(message = '') { $('data-error').textContent = message; $('data-error').hidden = !message; }
   function status(message = '', busy = false) {
     $('data-status').textContent = message; $('data-status').hidden = !message;
     $('data-status').classList.toggle('is-loading', busy);
+  }
+  const rosterName = entry => entry.context?.allianceName || entry.context?.allianceTag
+    ? rosterContextLabels(entry.context).alliance : entry.label || rosterContextLabels(entry.context).alliance;
+  const rosterDetails = entry => (entry.context?.serverId ? 'Server ' + rosterContextLabels(entry.context).server : 'Server not provided') +
+    ' · ' + count(entry.data.length, 'player');
+  function showRemoval(visible) {
+    $('data-options').hidden = visible;
+    $('data-description').hidden = visible;
+    $('data-remove-roster-form').hidden = !visible;
+    $('data-remove-cancel').hidden = !visible;
+    $('data-remove-confirm').hidden = !visible;
+    $('data-close').hidden = visible;
+  }
+  function renderRosters() {
+    const rosters = createRosterCache({ onWarning: message => { if (message) error(message); } }).listRosters();
+    $('data-rosters-empty').hidden = Boolean(rosters.length);
+    $('data-roster-list').replaceChildren(...rosters.map(entry => {
+      const row = document.createElement('li');
+      const details = document.createElement('div');
+      const name = document.createElement('strong');
+      name.textContent = rosterName(entry);
+      const description = document.createElement('span');
+      description.textContent = rosterDetails(entry);
+      details.append(name, description);
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'button secondary data-roster-remove';
+      button.textContent = 'Remove'; button.setAttribute('aria-label', 'Remove ' + rosterName(entry));
+      button.addEventListener('click', () => {
+        try {
+          error(); status();
+          removal = prepareRosterRemoval(window.localStorage, entry.id);
+          $('data-remove-name').textContent = rosterName(entry);
+          $('data-remove-details').textContent = rosterDetails(entry);
+          showRemoval(true); $('data-remove-cancel').focus();
+        } catch (cause) { removal = null; error(cause.message); renderRosters(); }
+      });
+      row.append(details, button);
+      return row;
+    }));
+  }
+  function refreshExport() {
+    if (exportUrl) URL.revokeObjectURL(exportUrl);
+    exportUrl = null;
+    $('data-download').removeAttribute('href'); $('data-download').setAttribute('aria-disabled', 'true');
+    try {
+      const exported = exportDataBackup(window.localStorage);
+      exportUrl = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }));
+      $('data-download').href = exportUrl;
+      $('data-download').download = 'basegrid-' + exported.exportedAt.slice(0, 10) + '.basegrid.json';
+      $('data-download').removeAttribute('aria-disabled');
+    } catch { error('Saved data could not be read. Export is unavailable; your existing data has been kept.'); }
   }
   function review() {
     prepared = prepareDataImport(window.localStorage, backup, { includeFormation: $('data-formation').checked });
@@ -73,20 +142,33 @@ export function setupDataTransfer() {
     showReview(true);
   }
   document.getElementById('open-data').addEventListener('click', () => {
-    reading++; backup = null; prepared = null; imported = false;
+    reading++; backup = null; prepared = null; removal = null; reloadOnClose = false;
     error(); status();
-    $('data-options').hidden = false; showReview(false);
+    showRemoval(false); showReview(false);
     $('data-file').value = ''; $('data-formation').checked = false;
     $('data-close').textContent = 'Close';
-    $('data-download').removeAttribute('href'); $('data-download').setAttribute('aria-disabled', 'true');
-    try {
-      const exported = exportDataBackup(window.localStorage);
-      exportUrl = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }));
-      $('data-download').href = exportUrl;
-      $('data-download').download = 'basegrid-' + exported.exportedAt.slice(0, 10) + '.basegrid.json';
-      $('data-download').removeAttribute('aria-disabled');
-    } catch { error('Saved data could not be read. Export is unavailable; your existing data has been kept.'); }
+    renderRosters(); refreshExport();
     dialog.showModal(); $('data-title').focus();
+  });
+  function cancelRemoval() {
+    removal = null; error(); showRemoval(false); renderRosters(); refreshExport();
+    $('data-rosters-title').focus();
+  }
+  $('data-remove-cancel').addEventListener('click', cancelRemoval);
+  dialog.addEventListener('cancel', event => {
+    if (removal) { event.preventDefault(); cancelRemoval(); }
+  });
+  $('data-remove-roster-form').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!removal) return;
+    try {
+      commitRosterRemoval(window.localStorage, removal);
+      const name = $('data-remove-name').textContent;
+      removal = null; reloadOnClose = true;
+      error(); showRemoval(false); renderRosters(); refreshExport();
+      status('Removed ' + name + '. Your plans and assignments are kept.');
+      $('data-rosters-title').focus();
+    } catch (cause) { error(cause.message); }
   });
   $('data-download').addEventListener('click', event => {
     if (!exportUrl) { event.preventDefault(); return; }
@@ -119,7 +201,7 @@ export function setupDataTransfer() {
     if (!prepared) return;
     try {
       const summary = commitDataImport(window.localStorage, prepared);
-      imported = true; prepared = null;
+      reloadOnClose = true; prepared = null;
       error(); $('data-options').hidden = true; $('data-import-confirm').hidden = true; $('data-close').textContent = 'Done';
       status(`Imported ${count(summary.plans.length, 'battle plan')} and ${count(summary.rostersAdded, 'saved roster')}.` +
         (summary.searchesAdded ? ` Added ${summary.searchesAdded} alliance ${summary.searchesAdded === 1 ? 'search' : 'searches'}.` : '') +
@@ -129,14 +211,21 @@ export function setupDataTransfer() {
   });
   $('data-close').addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
-    reading++; backup = null; prepared = null;
+    reading++; backup = null; prepared = null; removal = null;
     if (exportUrl) URL.revokeObjectURL(exportUrl); exportUrl = null;
     $('data-download').removeAttribute('href');
-    if (imported) window.location.reload();
+    if (reloadOnClose) window.location.reload();
   });
   // Other open planners must reload too, so a stale in-memory plan cannot undo
   // the import on its next autosave. This marker is written last, after all data.
   window.addEventListener('storage', event => {
     if (event.key === DATA_IMPORT_KEY && event.newValue) window.location.reload();
+    if (event.key === ROSTER_CACHE_KEY && event.oldValue) {
+      try {
+        const before = JSON.parse(event.oldValue).entries;
+        const after = event.newValue ? JSON.parse(event.newValue).entries : [];
+        if (before.some(entry => entry.kind === 'roster' && !after.some(other => other.kind === 'roster' && other.id === entry.id))) window.location.reload();
+      } catch { /* Invalid storage is reported when the data panel is opened. */ }
+    }
   });
 }

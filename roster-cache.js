@@ -57,11 +57,34 @@ export function normalizeRosterLibrary(value) {
   return { version: 1, entries };
 }
 
+/** Preview exactly one saved roster removal; plans and credentials are separate. */
+export function prepareRosterRemoval(storage, id) {
+  const before = storage.getItem(ROSTER_CACHE_KEY);
+  const saved = before === null ? { version: 1, entries: [] } : JSON.parse(before);
+  const library = normalizeRosterLibrary(saved);
+  const index = library.entries.findIndex(entry => entry.kind === 'roster' && entry.id === id);
+  if (index < 0) throw new Error('This roster is no longer saved. Close this confirmation and try again.');
+  // Keep every other saved lookup exactly as it was, including older metadata.
+  const entries = saved.entries.filter((_, position) => position !== index);
+  return { before, after: JSON.stringify({ ...saved, entries }), entry: library.entries[index] };
+}
+
+export function commitRosterRemoval(storage, removal) {
+  if (storage.getItem(ROSTER_CACHE_KEY) !== removal.before) {
+    throw new Error('Saved rosters changed. Cancel and choose the roster again.');
+  }
+  // Keep an empty library when removing the last roster. Its presence prevents
+  // the legacy formation migration from recreating a deliberately removed copy.
+  try { storage.setItem(ROSTER_CACHE_KEY, removal.after); }
+  catch { throw new Error('The roster could not be removed. Your saved data is unchanged. Try again.'); }
+}
+
 /** Persistent, opt-in refreshes: no expiry, background requests, or saved credentials. */
 export function createRosterCache({ getStorage = () => window.localStorage, onWarning = () => {},
   getAlliances = fetchAlliances, getMembers = fetchMembers, now = Date.now } = {}) {
   const entries = new Map();
   let loaded = false;
+  let libraryExists = false;
   const entryKey = (kind, id) => `${kind}:${String(id).toLowerCase()}`;
   const copy = entry => entry ? structuredClone(entry) : null;
 
@@ -70,6 +93,7 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
     loaded = true;
     try {
       const raw = getStorage().getItem(ROSTER_CACHE_KEY);
+      libraryExists = raw !== null;
       const saved = raw === null ? { version: 1, entries: [] } : JSON.parse(raw);
       if (saved?.version !== 1 || !Array.isArray(saved.entries)) throw new Error('Invalid saved library.');
       const latest = new Map();
@@ -103,13 +127,15 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
   }
 
   function remember(entry) {
-    read();
+    // Another panel or tab may have removed a roster since this cache was opened.
+    read(true);
     const clean = withContext(cleanEntry(entry));
     entries.set(entryKey(clean.kind, clean.id), { ...clean, persisted: false });
     try {
       getStorage().setItem(ROSTER_CACHE_KEY, JSON.stringify({ version: 1,
         entries: [...entries.values()].map(({ persisted, ...data }) => data) }));
       for (const value of entries.values()) value.persisted = true;
+      libraryExists = true;
       onWarning('');
     } catch {
       onWarning('Could not save this lookup locally. Keep this tab open to reuse it without another API call.');
@@ -118,7 +144,7 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
   }
 
   function get(kind, id) {
-    read();
+    read(true);
     return copy(withContext(entries.get(entryKey(kind, id))));
   }
 
@@ -137,7 +163,7 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
   return {
     reload: () => read(true),
     listRosters() {
-      read();
+      read(true);
       return [...entries.values()].filter(entry => entry.kind === 'roster')
         .sort((a, b) => b.savedAt - a.savedAt).map(entry => copy(withContext(entry)));
     },
@@ -146,8 +172,8 @@ export function createRosterCache({ getStorage = () => window.localStorage, onWa
     loadRoster: (id, options, settings) => lookup('roster', String(id).toLowerCase(), options, settings),
     loadAlliances: (server, options, settings) => lookup('alliances', String(Number(server)), options, settings),
     preservePreviousImport(players, context) {
-      read();
-      if (players?.length && ![...entries.values()].some(entry => entry.kind === 'roster')) {
+      read(true);
+      if (!libraryExists && players?.length && ![...entries.values()].some(entry => entry.kind === 'roster')) {
         remember({ kind: 'roster', id: context?.allianceId ?? 'previous-import', label: 'Previous import', context, data: players, savedAt: now() });
       }
     },

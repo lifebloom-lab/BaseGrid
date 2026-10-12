@@ -89,6 +89,8 @@ Each plan autosaves its own roster, title, and assignments under `basegrid.battl
 
 ## Share editable data
 
+To remove an unwanted saved alliance, open **Data**, find its name and server under **Saved rosters**, click **Remove**, then confirm **Remove roster**. Only that browser's saved roster is removed. Other rosters, saved battle plans, existing player assignments, the formation, and remembered API key stay intact. The list and downloadable backup update immediately; closing the panel refreshes the app. Cancel or Escape returns to the list without deleting. Removing the last roster does not cause it to be recreated from an older formation.
+
 Use **Data** in the header of either planner, then **Export data** to download a dated `.basegrid.json` file. Send it to another BaseGrid user; they open **Data**, choose the file under **Import data**, review its contents, and click **Import data**. PNG export remains separate for sharing an image in game.
 
 The file contains every saved battle plan (including reused names and Allies), formation inputs/positions/obstacles/placement progress, player HQ/rank/power, server and alliance context, and saved roster/alliance lookups. Known display preferences are included too. API keys, unrelated browser storage, map images and obsolete migration backups are excluded. File transfers and reusing imported rosters need no API calls or account.

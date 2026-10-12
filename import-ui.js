@@ -1,6 +1,6 @@
 import { orderPlayers } from './lastwar-api.js';
 import { playerDetails, rosterContextLabels } from './players.js';
-import { createRosterCache } from './roster-cache.js?v=20261012-battle-import';
+import { createRosterCache } from './roster-cache.js?v=20261012-remove-roster';
 import { setupSavedApiKey } from './api-key.js?v=20261012-key';
 
 /** A single active step, with optional device-local key storage. */

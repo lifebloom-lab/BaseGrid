@@ -14,6 +14,19 @@
 #data-download { display:inline-flex; align-items:center; }
 #data-download[aria-disabled=true] { opacity:.5; cursor:not-allowed; }
 #data-dialog .data-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+#data-roster-list { list-style:none; margin:14px 0 0; padding:0; }
+#data-roster-list li { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; }
+#data-roster-list li + li { border-top:1px solid var(--line); }
+#data-roster-list li > div { min-width:0; }
+#data-roster-list strong, #data-roster-list span { display:block; overflow-wrap:anywhere; font-size:.85rem; }
+#data-roster-list span { margin-top:4px; color:var(--muted); font-size:.78rem; }
+#data-roster-list .data-roster-remove { flex-shrink:0; min-height:44px; color:#f2bcb5; }
+#data-dialog .data-danger { background:#ae3834; border-color:#ae3834; color:#fff; }
+#data-dialog .data-danger:hover { background:#c2433d; border-color:#c2433d; }
+#data-remove-roster-form { margin-top:24px; }
+#data-dialog #data-remove-name { margin-bottom:4px; color:var(--text); font-weight:650; overflow-wrap:anywhere; }
+#data-dialog #data-remove-details { color:var(--muted); margin-top:0; }
+#data-dialog #data-remove-help { margin-top:20px; }
 #data-plan-list { max-height:190px; overflow:auto; padding-left:20px; margin:12px 0; font-size:.85rem; line-height:1.6; }
 #data-plan-list li { margin:6px 0; overflow-wrap:anywhere; }
 #data-dialog #data-formation-option { margin-top:18px; }

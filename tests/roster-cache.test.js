@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRosterCache, ROSTER_CACHE_KEY } from '../roster-cache.js';
+import { createRosterCache, ROSTER_CACHE_KEY, prepareRosterRemoval, commitRosterRemoval } from '../roster-cache.js';
 import { saveWorkspace, clearWorkspace, DEFAULT_DRAFT } from '../storage.js';
 
 const id = 'a'.repeat(32);
@@ -174,6 +174,81 @@ test('previous imports are preserved without a lookup and without replacing exis
   assert.equal(cache.listRosters()[0].id, 'previous-import');
   await cache.loadRoster(id);
   assert.equal(cache.listRosters().length, 2);
+});
+
+test('roster removal previews without writing and keeps every other lookup, plan, formation and key', async () => {
+  const storage = memoryStorage();
+  let calls = 0;
+  const cache = createRosterCache({ getStorage: () => storage, getMembers: async () => { calls++; return players; }, getAlliances: async () => alliances });
+  await cache.loadAlliances('1234');
+  await cache.loadRoster(id, {}, { context });
+  await cache.loadRoster(otherId);
+  const otherKeys = ['basegrid.workspace.v1', 'basegrid.battles.v2', 'basegrid.lastwar-api-key.v1'];
+  for (const key of otherKeys) storage.setItem(key, 'keep ' + key);
+  const before = storage.getItem(ROSTER_CACHE_KEY);
+  const preview = prepareRosterRemoval(storage, id);
+  assert.equal(storage.getItem(ROSTER_CACHE_KEY), before, 'opening and cancelling confirmation does not remove anything');
+  assert.deepEqual(preview.entry.context, context);
+  commitRosterRemoval(storage, preview);
+  assert.deepEqual(JSON.parse(storage.getItem(ROSTER_CACHE_KEY)).entries,
+    JSON.parse(before).entries.filter(entry => !(entry.kind === 'roster' && entry.id === id)));
+  for (const key of otherKeys) assert.equal(storage.getItem(key), 'keep ' + key);
+  assert.equal(cache.getRoster(id), null);
+  assert.equal(cache.listRosters().length, 1);
+  assert.equal(calls, 2, 'removal and rereading use no API calls');
+});
+
+test('removing the last roster survives legacy migration and reload until explicitly imported again', async () => {
+  const storage = memoryStorage();
+  const settings = { getStorage: () => storage, getMembers: async () => players };
+  const cache = createRosterCache(settings);
+  cache.preservePreviousImport(players, context);
+  commitRosterRemoval(storage, prepareRosterRemoval(storage, id));
+  assert.deepEqual(JSON.parse(storage.getItem(ROSTER_CACHE_KEY)).entries, []);
+  const reopened = createRosterCache(settings);
+  reopened.preservePreviousImport(players, context);
+  assert.deepEqual(reopened.listRosters(), []);
+  assert.equal((await reopened.loadRoster(id)).source, 'api');
+  assert.equal(reopened.listRosters().length, 1);
+});
+
+test('an older cache cannot resurrect a removed roster when saving a different lookup', async () => {
+  const storage = memoryStorage();
+  const cache = createRosterCache({ getStorage: () => storage, getMembers: async () => players });
+  await cache.loadRoster(id);
+  await cache.loadRoster(otherId);
+  commitRosterRemoval(storage, prepareRosterRemoval(storage, id));
+  await cache.loadRoster(otherId, {}, { label: 'Updated other alliance' });
+  assert.deepEqual(createRosterCache({ getStorage: () => storage }).listRosters().map(entry => entry.id), [otherId]);
+});
+
+test('a failed removal leaves the roster saved and available', async () => {
+  const storage = memoryStorage();
+  const cache = createRosterCache({ getStorage: () => storage, getMembers: async () => players });
+  await cache.loadRoster(id);
+  const before = storage.getItem(ROSTER_CACHE_KEY);
+  const preview = prepareRosterRemoval(storage, id);
+  storage.setItem = () => { throw new Error('Storage blocked'); };
+  assert.throws(() => commitRosterRemoval(storage, preview), /could not be removed/);
+  assert.equal(storage.getItem(ROSTER_CACHE_KEY), before);
+  assert.deepEqual(cache.getRoster(id).data, players);
+});
+
+test('a stale confirmation cannot erase a newly refreshed roster', async () => {
+  const storage = memoryStorage();
+  let power = 900;
+  const cache = createRosterCache({ getStorage: () => storage, getMembers: async () => players.map(player => ({ ...player, power })) });
+  await cache.loadRoster(id);
+  const preview = prepareRosterRemoval(storage, id);
+  power = 1000;
+  await cache.loadRoster(id, {}, { refresh: true });
+  const updated = storage.getItem(ROSTER_CACHE_KEY);
+  assert.throws(() => commitRosterRemoval(storage, preview), /Saved rosters changed/);
+  assert.equal(storage.getItem(ROSTER_CACHE_KEY), updated);
+  assert.throws(() => prepareRosterRemoval(storage, otherId), /no longer saved/);
+  storage.setItem(ROSTER_CACHE_KEY, '{broken');
+  assert.throws(() => prepareRosterRemoval(storage, id));
+  assert.equal(storage.getItem(ROSTER_CACHE_KEY), '{broken');
 });
 
 test('server and alliance context persists with a roster and survives reuse and explicit refresh', async () => {

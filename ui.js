@@ -1,11 +1,11 @@
-import { setupDataTransfer } from './data-transfer-ui.js';
+import { setupDataTransfer } from './data-transfer-ui.js?v=20261012-remove-roster';
 import { parseManualPlayers, playersFromDraft, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js';
 import { tileKey } from './free-formation.js';
 import { gridCanvas, previewGridMove } from './grid-layout.js';
 import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './storage.js';
 import { getTilePlan, openTilePlacement, confirmTilePlacement, undoTileConfirmation, cancelTilePlacement,
   recordCopiedMessage, moveTile, updateTileDraft, resetTileProgress, migrateTileWorkspace, returnBaseToPool, autoPlaceBases } from './tile-placement.js';
-import { setupRosterImport } from './import-ui.js?v=20261012-key';
+import { setupRosterImport } from './import-ui.js?v=20261012-remove-roster';
 import { setupFormationReorder } from './reorder-ui.js?v=20261004-zoom';
 import { setupMapZoom } from './map-zoom.js';
 import { setupPlacementMessages } from './placement-messages.js';
