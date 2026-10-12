@@ -1,5 +1,5 @@
 import { fetchAlliances, fetchMembers } from './lastwar-api.js';
-import { normalizeImportedPlayer, normalizeRosterContext } from './players.js';
+import { normalizeImportedPlayer, normalizeRosterContext } from './players.js?v=20261012-player-links';
 
 export const ROSTER_CACHE_KEY = 'basegrid.rosters.v1';
 const allianceId = value => typeof value === 'string' && /^[a-f\d]{32}$/i.test(value);

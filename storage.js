@@ -1,5 +1,5 @@
 import { restoreSession, serializeSession, normalizePlannedObstacles } from './placement.js';
-import { normalizeImportedPlayer, normalizeRosterContext } from './players.js';
+import { normalizeImportedPlayer, normalizeRosterContext } from './players.js?v=20261012-player-links';
 import { normalizeFreeLayout } from './free-formation.js';
 import { normalizeGridLayout } from './grid-layout.js';
 import { normalizeTilePlacements } from './tile-placement.js';

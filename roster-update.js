@@ -1,8 +1,8 @@
-import { BATTLE_KEY, LEGACY_BATTLE_KEY, loadBattles } from './battle-model.js?v=20261012-power';
+import { BATTLE_KEY, LEGACY_BATTLE_KEY, loadBattles, linkBattleRoster } from './battle-model.js?v=20261012-player-links';
 import { STORAGE_KEY, loadWorkspace } from './storage.js';
 import { ROSTER_CACHE_KEY, normalizeRosterLibrary } from './roster-cache.js?v=20261012-update';
-import { normalizeImportedPlayer } from './players.js';
-import { DATA_IMPORT_KEY, commitDataImport } from './data-transfer.js';
+import { normalizeImportedPlayer, playerSourceId } from './players.js?v=20261012-player-links';
+import { DATA_IMPORT_KEY, commitDataImport } from './data-transfer.js?v=20261012-player-links';
 
 const allianceId = id => typeof id === 'string' && /^[a-f\d]{32}$/i.test(id);
 
@@ -12,7 +12,7 @@ export function refreshPlayerStats(players, incoming) {
   const byId = new Map(incoming.filter(player => player.id?.startsWith('lastwar:')).map(player => [player.id, player]));
   let changed = false;
   const next = players.map(player => {
-    const fresh = byId.get(player.id);
+    const fresh = byId.get(playerSourceId(player));
     if (!fresh) return player;
     const stats = {};
     if (Number.isSafeInteger(fresh.power) && fresh.power >= 0) stats.power = fresh.power;
@@ -27,7 +27,7 @@ export function refreshPlayerStats(players, incoming) {
 }
 
 export function rosterUpdateSources(players, entries, draft) {
-  const known = new Set(players.filter(player => player.id.startsWith('lastwar:')).map(player => player.id));
+  const known = new Set(players.map(playerSourceId).filter(Boolean));
   const candidates = entries.filter(entry => entry.kind === 'roster' && allianceId(entry.id));
   const context = draft?.rosterContext;
   if (allianceId(context?.allianceId) && !candidates.some(entry => entry.id === context.allianceId)) {
@@ -37,7 +37,9 @@ export function rosterUpdateSources(players, entries, draft) {
   return candidates.map(entry => ({ ...entry, matches: new Set([
     ...entry.data,
     ...(context?.allianceId === entry.id ? draft.importedPlayers ?? [] : []),
-  ].filter(player => known.has(player.id)).map(player => player.id)).size }))
+  ].filter(player => known.has(player.id)).map(player => player.id).concat(
+    linkBattleRoster({ players }, entry.data).players.filter(player => playerSourceId(player) && !known.has(playerSourceId(player))).map(playerSourceId)
+  )).size }))
     .filter(entry => entry.matches).sort((a, b) => b.matches - a.matches || (b.savedAt ?? 0) - (a.savedAt ?? 0));
 }
 
@@ -60,8 +62,8 @@ export function prepareRosterUpdate(storage, incoming) {
   const update = players => {
     const next = refreshPlayerStats(players, entry.data);
     players.forEach((player, index) => {
-      if (incomingIds.has(player.id)) matched.add(player.id);
-      if (next[index] !== player) updated.add(player.id);
+      if (incomingIds.has(playerSourceId(player))) matched.add(playerSourceId(player));
+      if (next[index] !== player) updated.add(playerSourceId(player));
     });
     return next;
   };
@@ -69,7 +71,9 @@ export function prepareRosterUpdate(storage, incoming) {
   if (read(BATTLE_KEY) !== null || read(LEGACY_BATTLE_KEY) !== null) {
     const battles = loadBattles(source);
     for (const plans of Object.values(battles.plans)) for (const plan of plans) {
-      const players = update(plan.players);
+      const linked = linkBattleRoster(plan, entry.data);
+      linked.players.forEach((player, index) => { if (player !== plan.players[index]) updated.add(playerSourceId(player)); });
+      const players = update(linked.players);
       if (players !== plan.players) { plan.players = players; plansUpdated++; }
     }
     if (plansUpdated) changes.set(BATTLE_KEY, JSON.stringify(battles));

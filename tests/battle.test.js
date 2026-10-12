@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatBattlePower, battleZonePower, battleZonePowerLabel } from '../battle-model.js';
-import { deleteBattlePlan, normalizeBattles } from '../battle-model.js';
+import { deleteBattlePlan, normalizeBattles, restoreBattleLibraryPowers, linkBattlePlayer, linkBattleRoster } from '../battle-model.js';
 import { ALLIES, battlePlayer, battleCounts, playerZones, BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
@@ -247,6 +247,90 @@ test('old battle drafts recover missing power by imported ID, without replacing 
   for (const power of [-1, '100', Infinity, NaN, 1.5]) {
     assert.equal(mergeBattlePlayers(emptyBattle(), [{ ...roster[0], power }]).players[0].power, null);
   }
+});
+
+test('opening saved plans restores power across events using recent UID data and keeps known zero power', () => {
+  const state = emptyBattles();
+  const canyon = currentBattle(state, 'canyon');
+  canyon.players = [{ id: 'lastwar:1', name: 'Former name', power: null }, { id: 'lastwar:2', name: 'Same name', power: 0 }];
+  canyon.assignments = { power: ['lastwar:1', 'lastwar:2'], virus: ['lastwar:1'] };
+  const desert = currentBattle(state, 'desert');
+  desert.players = [
+    { id: 'lastwar:1', name: 'Other plan name', power: null },
+    { id: 'lastwar:3', name: 'Same name', power: 300 },
+    { id: 'lastwar:4', name: 'From session', power: null },
+  ];
+  canyon.players.push({ id: 'lastwar:3', name: 'A saved alias', power: null });
+  const before = structuredClone(state);
+  const sources = { rosters: [
+    { kind: 'roster', savedAt: 100, data: [{ id: 'lastwar:1', name: 'Old name', power: 100 }] },
+    { kind: 'roster', savedAt: 200, data: [{ id: 'lastwar:1', name: 'New name', power: 200 }, { id: 'lastwar:2', name: 'Same name', power: 999 }] },
+  ], workspaces: [{ session: { players: [{ id: 'lastwar:4', name: 'Renamed', power: 400 }] } }] };
+  const restored = restoreBattleLibraryPowers(state, sources);
+  assert.deepEqual(currentBattle(restored, 'canyon').players.map(player => player.power), [200, 0, 300]);
+  assert.deepEqual(currentBattle(restored, 'desert').players.map(player => player.power), [200, 300, 400]);
+  assert.deepEqual(currentBattle(restored, 'canyon').assignments, canyon.assignments);
+  assert.deepEqual(currentBattle(restored, 'canyon').players.map(player => player.name), canyon.players.map(player => player.name));
+  assert.deepEqual(state, before);
+  assert.equal(restoreBattleLibraryPowers(restored, sources), restored);
+});
+
+test('importing an incomplete roster cannot erase known power or reassign it to a matching name', () => {
+  const plan = assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power');
+  const restored = mergeBattlePlayers(plan, [
+    { id: 'lastwar:1', name: 'New name', power: null },
+    { id: 'lastwar:new', name: roster[0].name },
+  ]);
+  assert.equal(restored.players[0].power, roster[0].power);
+  assert.equal(restored.players[0].name, 'New name');
+  assert.equal(restored.players.at(-1).power, null);
+  assert.deepEqual(restored.assignments, plan.assignments);
+});
+
+test('a linked alias can restore power in another saved plan without its original roster', () => {
+  const plan = { ...emptyBattle(), players: [
+    { id: 'player-1', name: 'Local alias', sourcePlayerId: 'lastwar:20', power: null },
+    { id: 'lastwar:20', name: 'Game name', power: null },
+  ], assignments: { power: ['player-1'], virus: ['lastwar:20'] } };
+  const restored = restoreBattlePowers(plan, [{ id: 'battle:alias', name: 'Another alias', sourcePlayerId: 'lastwar:20', power: 220000000 }]);
+  assert.deepEqual(restored.players.map(player => player.power), [220000000, 220000000]);
+  assert.deepEqual(restored.assignments, plan.assignments);
+  assert.deepEqual(restored.players.map(player => player.name), ['Local alias', 'Game name']);
+});
+
+test('manual map entries link to unique roster UIDs without moving or duplicating assigned names', () => {
+  let plan = mergeBattlePlayers(emptyBattle(), [{ id: 'player-2', name: 'Debi90' }, { id: 'battle:alias', name: 'Charlie' }]);
+  plan = assignBattlePlayer(plan, 'desert', 'player-2', 'hospital-1');
+  plan = assignBattlePlayer(plan, 'desert', 'player-2', 'hospital-3');
+  const incoming = [{ id: 'lastwar:20', name: 'Debi90', power: 201501966, hqLevel: 35, group: 4 }];
+  const linked = mergeBattlePlayers(plan, incoming);
+  assert.equal(linked.players.length, 2, 'the imported UID connects to the existing map entry');
+  assert.equal(linked.players[0].id, 'player-2');
+  assert.equal(linked.players[0].sourcePlayerId, 'lastwar:20');
+  assert.equal(linked.players[0].power, 201501966);
+  assert.deepEqual(linked.assignments, plan.assignments);
+  const renamed = mergeBattlePlayers(linked, [{ ...incoming[0], name: 'New name', power: 220000000 }]);
+  assert.equal(renamed.players[0].name, 'Debi90');
+  assert.equal(renamed.players[0].power, 220000000);
+  assert.equal(normalizeBattle(renamed, 'desert').players[0].sourcePlayerId, 'lastwar:20');
+  assert.equal(plan.players[0].sourcePlayerId, undefined);
+});
+
+test('ambiguous names and lookalikes require explicit linking; existing game UIDs are never rebound', () => {
+  const plan = mergeBattlePlayers(emptyBattle(), [
+    { id: 'player-1', name: 'Same' }, { id: 'player-2', name: 'k0NF1G' }, { id: 'lastwar:old', name: 'Different UID' },
+  ]);
+  const incoming = [
+    { id: 'lastwar:a', name: 'Same', power: 100 }, { id: 'lastwar:b', name: 'Same', power: 200 },
+    { id: 'lastwar:c', name: 'k0NFIG', power: 300 }, { id: 'lastwar:d', name: 'Different UID', power: 400 },
+  ];
+  assert.equal(linkBattleRoster(plan, incoming), plan);
+  const linked = linkBattlePlayer(plan, 'player-2', incoming[2]);
+  assert.equal(linked.players[1].sourcePlayerId, 'lastwar:c');
+  assert.equal(linked.players[1].name, 'k0NF1G');
+  assert.equal(linked.players[1].power, 300);
+  assert.throws(() => linkBattlePlayer(plan, 'lastwar:old', incoming[3]), /different game UID/);
+  assert.throws(() => linkBattlePlayer(plan, 'player-2', { id: 'manual:other', name: 'k0NFIG' }));
 });
 
 test('invalid saved assignments are rejected instead of attaching names to the wrong players', () => {

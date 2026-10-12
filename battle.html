@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261012-key">
-  <link rel="stylesheet" href="./battle.css?v=20261012-battle-import">
-  <script type="module" src="./battle-ui.js?v=20261012-remove-roster"></script>
+  <link rel="stylesheet" href="./battle.css?v=20261012-player-links">
+  <script type="module" src="./battle-ui.js?v=20261012-player-links"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=20261012-remove-roster">
 </head>
 <body class="battle-app">
@@ -29,6 +29,7 @@
           <button id="battle-copy-roster" class="button secondary" type="button">Use BaseGrid roster</button>
           <button id="open-import" class="button secondary" type="button" aria-haspopup="dialog">Import roster</button>
           <button id="battle-update-roster" class="button secondary" type="button" aria-haspopup="dialog">Update roster</button>
+          <button id="battle-link-players" class="button secondary" type="button" aria-haspopup="dialog" hidden>Link player data</button>
           <p id="battle-roster-updated" class="field-help" hidden></p>
           <button id="battle-add-names" class="text-button" type="button">＋ Add names</button>
           <p id="battle-roster-help" class="field-help">Import your alliance or add names manually.</p>
@@ -148,6 +149,20 @@
       <p id="battle-roster-update-error" class="error" role="alert" hidden></p>
       <p id="battle-roster-update-status" role="status" aria-live="polite" hidden></p>
       <div class="battle-dialog-actions"><button id="battle-roster-update-close" class="button secondary" type="button">Cancel</button><button id="battle-roster-update-submit" class="button primary" type="submit">Update roster</button></div>
+    </form>
+  </dialog>
+  <dialog id="battle-link-dialog" class="battle-dialog battle-picker" aria-labelledby="battle-link-title">
+    <form id="battle-link-form">
+      <div class="battle-picker-header">
+        <h2 id="battle-link-title" tabindex="-1">Link player data</h2>
+        <p>Choose the roster player behind a map name. Names and assignments stay in place.</p>
+        <label for="battle-link-local">Map name</label>
+        <div class="battle-select"><select id="battle-link-local"></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></div>
+        <label for="battle-link-search">Find roster player</label>
+        <input id="battle-link-search" type="search" placeholder="Search name or UID…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="battle-picker-scroll"><p id="battle-link-empty" hidden>No matching players. Try another name or UID.</p><ul id="battle-link-list" aria-label="Roster players to link"></ul></div>
+      <div class="battle-picker-footer"><div class="battle-dialog-actions"><button id="battle-link-cancel" class="button secondary" type="button">Cancel</button><button id="battle-link-submit" class="button primary" type="submit" disabled>Link player</button></div></div>
     </form>
   </dialog>
   <dialog id="battle-picker-dialog" class="battle-dialog battle-picker" aria-labelledby="battle-picker-title" aria-describedby="battle-picker-context">

@@ -1,5 +1,5 @@
 import { orderPlayers } from './lastwar-api.js';
-import { playerDetails, rosterContextLabels } from './players.js';
+import { playerDetails, rosterContextLabels } from './players.js?v=20261012-player-links';
 import { createRosterCache } from './roster-cache.js?v=20261012-remove-roster';
 import { setupSavedApiKey } from './api-key.js?v=20261012-key';
 

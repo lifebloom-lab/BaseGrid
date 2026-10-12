@@ -1,6 +1,12 @@
 const validLevel = value => Number.isSafeInteger(value) && value > 0;
 const validGroup = value => Number.isInteger(value) && value >= 1 && value <= 5;
 
+/** Local plan IDs stay stable; linked manual names use a separate game identity. */
+export function playerSourceId(player) {
+  const id = player?.id?.startsWith('lastwar:') ? player.id : player?.sourcePlayerId;
+  return typeof id === 'string' && id.startsWith('lastwar:') && id.length > 8 ? id : null;
+}
+
 /** Import provenance is separate from a member's home server. Never infer one from the other. */
 export function normalizeRosterContext(value) {
   if (!value || typeof value !== 'object') return null;

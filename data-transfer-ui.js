@@ -1,6 +1,6 @@
-import { DATA_IMPORT_KEY, MAX_BACKUP_BYTES, exportDataBackup, parseDataBackup, prepareDataImport, commitDataImport } from './data-transfer.js';
+import { DATA_IMPORT_KEY, MAX_BACKUP_BYTES, exportDataBackup, parseDataBackup, prepareDataImport, commitDataImport } from './data-transfer.js?v=20261012-player-links';
 import { ROSTER_CACHE_KEY, createRosterCache, prepareRosterRemoval, commitRosterRemoval } from './roster-cache.js?v=20261012-remove-roster';
-import { rosterContextLabels } from './players.js';
+import { rosterContextLabels } from './players.js?v=20261012-player-links';
 
 export function setupDataTransfer() {
   const dialog = document.createElement('dialog');

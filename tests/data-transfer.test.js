@@ -51,6 +51,67 @@ test('a remembered API key never travels in a backup or overwrites the recipient
   assert.equal(readSavedApiKey(recipient), 'recipient-private-key');
 });
 
+test('older shared plans recover power by UID from the file even when its formation is not imported', () => {
+  const backup = exportDataBackup(source());
+  backup.rosters.entries = [];
+  for (const plan of backup.battles.plans.canyon) {
+    plan.players[0].power = null;
+    plan.players[0].name = 'Name before rename';
+    plan.players.push({ id: 'lastwar:other', name: player.name, power: null });
+    plan.players.push({ id: 'battle:manual', name: player.name, power: null });
+  }
+  const target = memory();
+  const preview = prepareDataImport(target, backup);
+  assert.equal(target.data.size, 0);
+  commitDataImport(target, preview);
+  assert.equal(target.getItem(STORAGE_KEY), null);
+  for (const plan of loadBattles(target).plans.canyon) {
+    assert.equal(plan.players[0].power, player.power);
+    assert.equal(plan.players[0].name, 'Name before rename');
+    assert.equal(plan.players[1].power, null, 'a matching name with a different UID stays unknown');
+    assert.equal(plan.players[2].power, null, 'manual names are not mistaken for imported players');
+    assert.deepEqual(playerZones(plan, player.id), ['power', 'virus']);
+  }
+  const roundtrip = exportDataBackup(target);
+  assert.equal(roundtrip.battles.plans.canyon[0].players[0].power, player.power);
+});
+
+test('import fills missing plan power from recipient rosters without loading the source formation', () => {
+  const backup = exportDataBackup(source());
+  backup.workspace = null;
+  backup.rosters.entries = [];
+  for (const plan of backup.battles.plans.canyon) plan.players[0].power = null;
+  const target = memory();
+  target.setItem(ROSTER_CACHE_KEY, source().getItem(ROSTER_CACHE_KEY));
+  const beforeRosters = target.getItem(ROSTER_CACHE_KEY);
+  commitDataImport(target, prepareDataImport(target, backup));
+  assert.equal(target.getItem(ROSTER_CACHE_KEY), beforeRosters);
+  for (const plan of loadBattles(target).plans.canyon) {
+    assert.equal(plan.players[0].power, player.power);
+    assert.deepEqual(playerZones(plan, player.id), ['power', 'virus']);
+  }
+});
+
+test('imported roster data repairs existing plans even when that alliance is already saved', () => {
+  const target = source();
+  const battles = loadBattles(target);
+  for (const plan of battles.plans.canyon) plan.players[0].power = null;
+  saveBattles(target, battles);
+  target.removeItem(STORAGE_KEY);
+  const rosters = JSON.parse(target.getItem(ROSTER_CACHE_KEY));
+  delete rosters.entries[0].data[0].power;
+  target.setItem(ROSTER_CACHE_KEY, JSON.stringify(rosters));
+  const backup = exportDataBackup(source());
+  backup.battles = null; backup.workspace = null;
+  const preview = prepareDataImport(target, backup);
+  assert.equal(preview.summary.rostersKept, 1);
+  commitDataImport(target, preview);
+  for (const plan of loadBattles(target).plans.canyon) {
+    assert.equal(plan.players[0].power, player.power);
+    assert.deepEqual(playerZones(plan, player.id), ['power', 'virus']);
+  }
+});
+
 test('a portable file restores formation, obstacles, confirmations, metadata, cached lookups and independent battle copies', async () => {
   const original = source();
   const backup = parseDataBackup(JSON.stringify(exportDataBackup(original)));

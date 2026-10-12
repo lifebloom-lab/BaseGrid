@@ -1,4 +1,4 @@
-import { normalizeImportedPlayer, sortPoolPlayers } from './players.js';
+import { normalizeImportedPlayer, sortPoolPlayers, playerSourceId } from './players.js?v=20261012-player-links';
 
 export const BATTLE_KEY = 'basegrid.battles.v2';
 export const LEGACY_BATTLE_KEY = 'basegrid.battles.v1';
@@ -76,7 +76,46 @@ export function cleanBattlePlayer(player) {
     throw new Error('Invalid battle player.');
   }
   const { hqLevel, group } = normalizeImportedPlayer(player);
-  return { id: player.id, name: player.name.trim(), hqLevel, group, power: validPower(player.power) ? player.power : null };
+  const sourcePlayerId = playerSourceId(player);
+  return { id: player.id, name: player.name.trim(), hqLevel, group, power: validPower(player.power) ? player.power : null,
+    ...(sourcePlayerId && sourcePlayerId !== player.id ? { sourcePlayerId } : {}) };
+}
+
+const rosterNameKey = name => name.trim().normalize('NFKC').toLocaleLowerCase('en');
+
+export function linkBattlePlayer(plan, localId, imported) {
+  const sourcePlayerId = playerSourceId(imported);
+  if (!sourcePlayerId || imported.id !== sourcePlayerId || !plan.players.some(player => player.id === localId)) throw new Error('Choose a saved roster player to link.');
+  const clean = cleanBattlePlayer(imported);
+  const players = plan.players.map(player => {
+    if (player.id !== localId) return player;
+    if (player.id.startsWith('lastwar:') && player.id !== sourcePlayerId) throw new Error('This player already has a different game UID.');
+    return { ...player, ...(player.id !== sourcePlayerId ? { sourcePlayerId } : {}),
+      ...(clean.power !== null ? { power: clean.power } : {}),
+      ...(clean.hqLevel !== null ? { hqLevel: clean.hqLevel } : {}),
+      ...(clean.group !== null ? { group: clean.group } : {}) };
+  });
+  return { ...plan, players };
+}
+
+/** A one-time bridge for old/manual names. Never guess fuzzy or ambiguous names.
+ * Keep local IDs, aliases, repeated occurrences and every assignment unchanged.
+ */
+export function linkBattleRoster(plan, incoming) {
+  const byId = new Map();
+  for (const player of incoming) if (player.id?.startsWith('lastwar:') && !byId.has(player.id)) byId.set(player.id, player);
+  const byName = new Map();
+  for (const player of byId.values()) {
+    const key = rosterNameKey(player.name);
+    byName.set(key, [...(byName.get(key) ?? []), player]);
+  }
+  let next = plan;
+  for (const player of plan.players) {
+    if (playerSourceId(player)) continue;
+    const matches = byName.get(rosterNameKey(player.name));
+    if (matches?.length === 1) next = linkBattlePlayer(next, player.id, matches[0]);
+  }
+  return next;
 }
 
 // Earlier battle drafts omitted power. Fill missing values by stable imported ID
@@ -84,15 +123,41 @@ export function cleanBattlePlayer(player) {
 export function restoreBattlePowers(plan, savedPlayers) {
   const powers = new Map();
   for (const player of savedPlayers) {
-    if (player.id?.startsWith('lastwar:') && validPower(player.power) && !powers.has(player.id)) powers.set(player.id, player.power);
+    const sourceId = playerSourceId(player);
+    if (sourceId && validPower(player.power) && !powers.has(sourceId)) powers.set(sourceId, player.power);
   }
   let changed = false;
   const players = plan.players.map(player => {
-    if (validPower(player.power) || !powers.has(player.id)) return player;
+    const sourceId = playerSourceId(player);
+    if (validPower(player.power) || !powers.has(sourceId)) return player;
     changed = true;
-    return { ...player, power: powers.get(player.id) };
+    return { ...player, power: powers.get(sourceId) };
   });
   return changed ? { ...plan, players } : plan;
+}
+
+/** Repair older/imported snapshots by UID, including plans that are not open.
+ * Known values stay intact; the most recent saved roster supplies missing ones.
+ * A formation is a source of player data even when its layout is not imported.
+ */
+export function restoreBattleLibraryPowers(state, { rosters = [], workspaces = [] } = {}) {
+  if (!state) return state;
+  const savedPlayers = [
+    ...rosters.filter(entry => entry.kind === 'roster').sort((a, b) => b.savedAt - a.savedAt).flatMap(entry => entry.data),
+    ...workspaces.flatMap(workspace => [
+      ...(workspace?.draft?.importedPlayers ?? []),
+      ...(workspace?.draft?.orderedPlayers ?? []),
+      ...(workspace?.session?.players ?? []),
+    ]),
+    ...Object.values(state.plans).flatMap(plans => plans.flatMap(plan => plan.players)),
+  ];
+  let changed = false;
+  const plans = Object.fromEntries(Object.entries(state.plans).map(([mapId, plans]) => [mapId, plans.map(plan => {
+    const restored = restoreBattlePowers(plan, savedPlayers);
+    if (restored !== plan) changed = true;
+    return restored;
+  })]));
+  return changed ? { ...state, plans } : state;
 }
 
 export function normalizeBattle(value, mapId) {
@@ -228,8 +293,21 @@ export function deleteBattlePlan(state, planId = state.selectedPlans[state.selec
 }
 
 export function mergeBattlePlayers(plan, incoming) {
-  const players = new Map(plan.players.map(player => [player.id, player]));
-  for (const player of incoming) players.set(player.id, cleanBattlePlayer(player));
+  const linked = linkBattleRoster(plan, incoming);
+  const players = new Map(linked.players.map(player => [player.id, player]));
+  for (const player of incoming) {
+    const clean = cleanBattlePlayer(player);
+    const aliases = [...players.values()].filter(existing => existing.id !== clean.id && playerSourceId(existing) === clean.id);
+    for (const alias of aliases) {
+      const refreshed = linkBattlePlayer({ players: [alias] }, alias.id, clean).players[0];
+      players.set(alias.id, refreshed);
+    }
+    if (aliases.length && !players.has(clean.id)) continue;
+    const previous = players.get(clean.id);
+    // Reusing an older roster must not erase power already known for this UID.
+    if (clean.id.startsWith('lastwar:') && clean.power === null && validPower(previous?.power)) clean.power = previous.power;
+    players.set(clean.id, clean);
+  }
   return { ...plan, players: [...players.values()] };
 }
 

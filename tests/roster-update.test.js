@@ -123,7 +123,30 @@ test('an alliance is suggested only through player IDs, with ambiguous matches l
   assert.equal(fallback[0].matches, 3);
   assert.equal(rosterUpdateSources(players, [sameNames], { importedPlayers: players, rosterContext: entry(players).context })[0].matches, 3,
     'the saved alliance link survives a refreshed cache with no overlapping members');
-  assert.deepEqual(rosterUpdateSources([{ id: 'manual:1', name: 'Aurora' }], [entry(players)], null), []);
+  assert.equal(rosterUpdateSources([{ id: 'manual:1', name: 'Aurora' }], [entry(players)], null)[0].matches, 1,
+    'an exact unique roster name can establish the missing UID link');
+});
+
+test('a roster update links manual map names once and refreshes them by UID after a rename', () => {
+  const storage = savedPlans();
+  let battles = loadBattles(storage);
+  const plan = battles.plans.desert[0];
+  plan.players.push({ id: 'player-7', name: 'Renamed Aurora', power: null }, { id: 'player-8', name: 'Renamed Aurora', power: null });
+  plan.assignments['hospital-1'] = ['player-7']; plan.assignments['hospital-4'] = ['player-8'];
+  saveBattles(storage, battles);
+  const assignments = structuredClone(plan.assignments);
+  commitRosterUpdate(storage, prepareRosterUpdate(storage, entry(fresh)));
+  battles = loadBattles(storage);
+  for (const player of battles.plans.desert[0].players.slice(-2)) {
+    assert.equal(player.sourcePlayerId, 'lastwar:1'); assert.equal(player.power, 250);
+  }
+  const renamed = fresh.map(player => ({ ...player, name: 'A completely changed name', power: 500 }));
+  commitRosterUpdate(storage, prepareRosterUpdate(storage, entry(renamed)));
+  const updated = loadBattles(storage).plans.desert[0];
+  assert.deepEqual(updated.assignments, assignments);
+  assert.equal(updated.players.at(-1).name, 'Renamed Aurora');
+  assert.equal(updated.players.at(-1).power, 500);
+  assert.equal(exportDataBackup(storage).battles.plans.desert[0].players.at(-1).sourcePlayerId, 'lastwar:1');
 });
 
 test('incomplete/invalid responses and corrupt saved data cannot overwrite existing data', () => {

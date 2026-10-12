@@ -1,4 +1,4 @@
-import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261012-room';
+import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261012-player-links';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const HEADER = 108;

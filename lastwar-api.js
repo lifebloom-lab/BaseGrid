@@ -1,5 +1,5 @@
 /** LastWarTools adapter. Requests go through our same-origin, read-only relay. */
-import { normalizeImportedPlayer } from './players.js';
+import { normalizeImportedPlayer } from './players.js?v=20261012-player-links';
 
 const ALLIANCE_ID = /^[a-f\d]{32}$/i;
 const RELAY_HELP = 'Imports need the BaseGrid import server. Start the app with python3 server.py, then try again.';

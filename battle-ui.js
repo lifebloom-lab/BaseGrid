@@ -1,11 +1,11 @@
-import { setupDataTransfer } from './data-transfer-ui.js?v=20261012-remove-roster';
-import { setupRosterUpdate } from './roster-update-ui.js?v=20261012-key';
+import { setupDataTransfer } from './data-transfer-ui.js?v=20261012-player-links';
+import { setupRosterUpdate } from './roster-update-ui.js?v=20261012-player-links';
 import { setupRosterImport } from './import-ui.js?v=20261012-remove-roster';
-import { refreshPlayerStats } from './roster-update.js';
-import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-delete';
+import { refreshPlayerStats } from './roster-update.js?v=20261012-player-links';
+import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, linkBattlePlayer, linkBattleRoster, restoreBattleLibraryPowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-player-links';
 import { drawBattle } from './battle-render.js?v=20261012-room';
 import { loadWorkspace } from './storage.js';
-import { playersFromDraft } from './players.js';
+import { playersFromDraft, playerSourceId } from './players.js?v=20261012-player-links';
 import { createRosterCache } from './roster-cache.js';
 
 const $ = id => document.getElementById(id);
@@ -40,6 +40,7 @@ let renderVersion = 0;
 let exportUrl = null;
 let picker = null;
 let rosterUpdater = null;
+let playerLink = null;
 const images = new Map();
 const searchText = value => value.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
 
@@ -102,6 +103,51 @@ function sourcePlayers() {
   try { return playersFromDraft(loadWorkspace(window.localStorage).draft); }
   catch { return []; }
 }
+function rosterCandidates() {
+  const byId = new Map();
+  for (const player of [...createRosterCache().listRosters().flatMap(entry => entry.data),
+    ...Object.values(state.plans).flatMap(plans => plans.flatMap(plan => plan.players))]) {
+    if (player.id.startsWith('lastwar:') && !byId.has(player.id)) byId.set(player.id, player);
+  }
+  return [...byId.values()];
+}
+function unlinkedPlayers() { return plan().players.filter(player => !playerSourceId(player)); }
+function renderLinkChoices() {
+  const query = searchText($('battle-link-search').value);
+  const players = sortBattlePlayers(playerLink.candidates, 'name').filter(player => searchText(player.name).includes(query) || player.id.slice(8).includes(query));
+  $('battle-link-empty').hidden = Boolean(players.length);
+  $('battle-link-list').replaceChildren(...players.map(player => {
+    const row = make('li');
+    const label = make('label', 'battle-picker-row');
+    const radio = make('input'); radio.type = 'radio'; radio.name = 'linked-player'; radio.value = player.id;
+    radio.checked = playerLink.id === player.id; radio.setAttribute('aria-label', player.name + ' · UID ' + player.id.slice(8));
+    const body = make('span', 'battle-picker-player');
+    body.append(make('span', 'battle-picker-name', player.name), make('span', 'battle-player-meta', 'Power ' + formatBattlePower(player.power)),
+      make('span', 'battle-picker-location', 'UID ' + player.id.slice(8)));
+    label.append(radio, body); row.append(label);
+    radio.addEventListener('change', () => { playerLink.id = player.id; $('battle-link-submit').disabled = false; });
+    return row;
+  }));
+}
+$('battle-link-players').addEventListener('click', () => {
+  playerLink = { planId: plan().id, candidates: rosterCandidates(), id: null };
+  $('battle-link-local').replaceChildren(...unlinkedPlayers().map(player => new Option(player.name, player.id)));
+  $('battle-link-search').value = ''; $('battle-link-submit').disabled = true;
+  renderLinkChoices(); $('battle-link-dialog').showModal(); $('battle-link-title').focus();
+});
+$('battle-link-search').addEventListener('input', renderLinkChoices);
+$('battle-link-local').addEventListener('change', () => { playerLink.id = null; $('battle-link-submit').disabled = true; renderLinkChoices(); });
+$('battle-link-cancel').addEventListener('click', () => $('battle-link-dialog').close());
+$('battle-link-dialog').addEventListener('close', () => { playerLink = null; });
+$('battle-link-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!playerLink || playerLink.planId !== plan().id) return;
+  const imported = playerLink.candidates.find(player => player.id === playerLink.id);
+  if (!imported) return;
+  const next = linkBattlePlayer(plan(), $('battle-link-local').value, imported);
+  $('battle-link-dialog').close();
+  change(next, 'Player data linked. Future roster updates will use this UID.');
+});
 function renderSource() {
   const count = sourcePlayers().length;
   $('battle-copy-roster').disabled = !count;
@@ -429,6 +475,9 @@ function render() {
   $('battle-progress').textContent = counts.assigned + ' assigned · ' + counts.unassigned + ' unassigned' + (counts.alliesZones ? ' · Allies in ' + counts.alliesZones + (counts.alliesZones === 1 ? ' zone' : ' zones') : '');
   $('battle-undo').disabled = !planHistory().length;
   $('battle-reset').disabled = !Object.values(plan().assignments).some(ids => ids.length);
+  const unlinked = unlinkedPlayers().length;
+  $('battle-link-players').hidden = !unlinked || !rosterCandidates().length;
+  $('battle-link-players').textContent = 'Link player data · ' + unlinked;
   renderPlayers(); renderTeam(); selection(); renderMap();
   rosterUpdater?.render();
 }
@@ -609,8 +658,11 @@ new ResizeObserver(([entry]) => {
   mapDisplayWidth = width;
   renderMap();
 }).observe($('battle-map-stage'));
-const savedPlayers = [...sourcePlayers(), ...createRosterCache().listRosters().flatMap(roster => roster.data)];
-for (const id of Object.keys(BATTLE_MAPS)) state.plans[id] = state.plans[id].map(plan => restoreBattlePowers(plan, savedPlayers));
+let powerWorkspace = null;
+try { powerWorkspace = loadWorkspace(window.localStorage); } catch { /* Keep battle plans usable if the formation is unavailable. */ }
+const savedRosterCandidates = rosterCandidates();
+for (const plans of Object.values(state.plans)) for (let index = 0; index < plans.length; index++) plans[index] = linkBattleRoster(plans[index], savedRosterCandidates);
+state = restoreBattleLibraryPowers(state, { rosters: createRosterCache().listRosters(), workspaces: [powerWorkspace] });
 syncSettings(); renderSource(); persist(); render();
 
 setupDataTransfer();
@@ -618,14 +670,28 @@ setupRosterImport({
   hasRoster: () => plan().players.length > 0,
   destinationHelp: 'Players will be added to this plan’s roster.',
   onImport(players) {
-    change(mergeBattlePlayers(plan(), players), 'Roster imported. Existing assignments kept.');
+    planHistory().push(structuredClone(plan()));
+    if (planHistory().length > 30) planHistory().shift();
+    state = updateBattlePlan(state, mergeBattlePlayers(plan(), players));
+    for (const plans of Object.values(state.plans)) for (let index = 0; index < plans.length; index++) {
+      const linked = linkBattleRoster(plans[index], players);
+      plans[index] = { ...linked, players: refreshPlayerStats(linked.players, players) };
+    }
+    for (const snapshots of history.values()) for (let index = 0; index < snapshots.length; index++) {
+      const linked = linkBattleRoster(snapshots[index], players);
+      snapshots[index] = { ...linked, players: refreshPlayerStats(linked.players, players) };
+    }
+    persist(); render(); announce('Roster imported. Player data updated; assignments kept.');
   },
 });
 $('import-dialog').addEventListener('close', () => rosterUpdater?.render());
 rosterUpdater = setupRosterUpdate({ getState: () => state, onUpdated(entry) {
   state = loadBattles(window.localStorage);
   // Undo still changes assignments, without bringing back pre-refresh stats.
-  for (const snapshots of history.values()) for (const snapshot of snapshots) snapshot.players = refreshPlayerStats(snapshot.players, entry.data);
+  for (const snapshots of history.values()) for (let index = 0; index < snapshots.length; index++) {
+    const linked = linkBattleRoster(snapshots[index], entry.data);
+    snapshots[index] = { ...linked, players: refreshPlayerStats(linked.players, entry.data) };
+  }
   syncSettings(); renderSource(); render();
   announce('Roster updated. Assignments preserved.');
 } });

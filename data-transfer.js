@@ -1,4 +1,4 @@
-import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattles, loadBattles, normalizeBattles } from './battle-model.js?v=20261012-power';
+import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattles, loadBattles, normalizeBattles, restoreBattleLibraryPowers } from './battle-model.js?v=20261012-player-links';
 import { STORAGE_KEY, DEFAULT_DRAFT, loadWorkspace } from './storage.js';
 import { ROSTER_CACHE_KEY, normalizeRosterLibrary } from './roster-cache.js?v=2';
 import { serializeSession } from './placement.js';
@@ -53,9 +53,12 @@ function cleanPreferences(value = {}) {
 export function normalizeDataBackup(value) {
   if (value?.format !== FORMAT || value.version !== 1) throw new Error('Choose a supported BaseGrid data file (.basegrid.json).');
   if (typeof value.exportedAt !== 'string' || !Number.isFinite(Date.parse(value.exportedAt))) throw new Error('The data file has an invalid date.');
-  return { format: FORMAT, version: 1, exportedAt: value.exportedAt,
-    workspace: cleanWorkspace(value.workspace), battles: value.battles === null ? null : normalizeBattles(value.battles),
-    rosters: normalizeRosterLibrary(value.rosters), preferences: cleanPreferences(value.preferences) };
+  const workspace = cleanWorkspace(value.workspace);
+  const rosters = normalizeRosterLibrary(value.rosters);
+  const battles = value.battles === null ? null : normalizeBattles(value.battles);
+  return { format: FORMAT, version: 1, exportedAt: value.exportedAt, workspace,
+    battles: restoreBattleLibraryPowers(battles, { rosters: rosters.entries, workspaces: [workspace] }),
+    rosters, preferences: cleanPreferences(value.preferences) };
 }
 
 export function parseDataBackup(text) {
@@ -130,6 +133,16 @@ export function prepareDataImport(storage, input, { includeFormation = false } =
   if (summary.rostersAdded || summary.searchesAdded) changes.set(ROSTER_CACHE_KEY, JSON.stringify(library));
   if (includeFormation && backup.workspace) {
     changes.set(STORAGE_KEY, JSON.stringify(backup.workspace)); summary.formationIncluded = true;
+  }
+  // Reconnect player stats before saving, even if a duplicate roster is kept or
+  // the sender's formation is not selected. Never match by name or array order.
+  if (changes.has(BATTLE_KEY) || read(BATTLE_KEY) !== null || read(LEGACY_BATTLE_KEY) !== null) {
+    const battles = changes.has(BATTLE_KEY) ? JSON.parse(changes.get(BATTLE_KEY)) : loadBattles({ getItem: read });
+    const localWorkspace = read(STORAGE_KEY) === null ? null : loadWorkspace({ getItem: read });
+    const restored = restoreBattleLibraryPowers(battles, {
+      rosters: [...library.entries, ...backup.rosters.entries], workspaces: [localWorkspace, backup.workspace],
+    });
+    if (restored !== battles) changes.set(BATTLE_KEY, JSON.stringify(restored));
   }
   // Display preferences fill gaps, but never overwrite the recipient's choices.
   for (const [key, value] of [[MESSAGE_LANGUAGE_KEY, backup.preferences.messageLanguage], [ZOOM_KEY, backup.preferences.mapZoom]]) {
