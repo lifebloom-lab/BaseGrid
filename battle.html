@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261008-search">
-  <link rel="stylesheet" href="./battle.css?v=1">
-  <script type="module" src="./battle-ui.js?v=20261008-data"></script>
+  <link rel="stylesheet" href="./battle.css?v=20261012-power">
+  <script type="module" src="./battle-ui.js?v=20261012-power"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=1">
 </head>
 <body class="battle-app">
@@ -38,7 +38,7 @@
       </aside>
       <section class="battle-board-column" aria-label="Battle assignment board">
         <div class="panel battle-board">
-          <div class="battle-map-toolbar"><div><h2 id="battle-map-name">Canyon Storm</h2><p id="battle-progress" class="field-help">0 assigned</p></div><div class="battle-board-actions"><button id="battle-undo" class="button secondary" type="button" disabled>Undo</button><button id="battle-zoom" class="button secondary" type="button" aria-pressed="false">Enlarge map</button></div></div>
+          <div class="battle-map-toolbar"><div><h2 id="battle-map-name">Canyon Storm</h2><p id="battle-progress" class="field-help">0 assigned</p></div><div class="battle-board-actions"><label class="battle-checkbox"><input id="battle-show-power" type="checkbox" checked>Show power</label><button id="battle-undo" class="button secondary" type="button" disabled>Undo</button><button id="battle-zoom" class="button secondary" type="button" aria-pressed="false">Enlarge map</button></div></div>
           <div id="battle-selection" class="battle-selection" hidden><span id="battle-selection-name"></span><button id="battle-cancel-selection" type="button" class="text-button">Cancel</button></div>
           <p id="battle-status" class="battle-instructions" role="status" aria-live="polite">Select a zone to view its team.</p>
           <div id="battle-overflow" class="battle-overflow" role="status" hidden><p id="battle-overflow-text"></p></div>

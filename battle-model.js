@@ -38,6 +38,26 @@ export const BATTLE_MAPS = {
 export function emptyBattle() { return { title: 'Team A', players: [], assignments: {} }; }
 
 const validPower = value => Number.isSafeInteger(value) && value >= 0;
+const compactPower = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+const exactPower = new Intl.NumberFormat('en');
+export const formatBattlePower = (value, exact = false) => validPower(value) ? (exact ? exactPower : compactPower).format(value) : '—';
+
+export function battleZonePower(plan, zoneId) {
+  const ids = new Set(plan.assignments[zoneId] ?? []);
+  const players = plan.players.filter(player => ids.has(player.id));
+  const known = players.filter(player => validPower(player.power));
+  return { total: known.length ? known.reduce((total, player) => total + player.power, 0) : null,
+    playerCount: players.length, missingCount: players.length - known.length, allies: ids.has(ALLIES.id) };
+}
+
+export function battleZonePowerLabel(summary) {
+  const { total, playerCount, missingCount, allies } = summary;
+  const parts = [formatBattlePower(total) + (total !== null && (missingCount || allies) ? ' known' : '')];
+  if (playerCount) parts.push(playerCount + (playerCount === 1 ? ' player' : ' players'));
+  if (missingCount) parts.push(missingCount + ' unknown');
+  if (allies) parts.push('Allies');
+  return parts.join(' · ');
+}
 const normalizePlayerSort = value => ['rank', 'power', 'name'].includes(value) ? value : 'rank';
 
 export function sortBattlePlayers(players, order = 'rank') {
@@ -96,7 +116,7 @@ export function normalizeBattle(value, mapId) {
 }
 
 export function emptyBattles() {
-  return { version: 2, selectedMap: 'canyon', playerSort: 'rank',
+  return { version: 2, selectedMap: 'canyon', playerSort: 'rank', showPower: true,
     selectedPlans: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, 'initial-' + id])),
     plans: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id, [{ id: 'initial-' + id, ...emptyBattle() }]])) };
 }
@@ -127,7 +147,7 @@ export function normalizeBattles(saved) {
     return [mapId, normalized];
   }));
   return { version: 2, selectedMap: BATTLE_MAPS[saved.selectedMap] ? saved.selectedMap : 'canyon',
-    playerSort: normalizePlayerSort(saved.playerSort), plans,
+    playerSort: normalizePlayerSort(saved.playerSort), showPower: saved.showPower !== false, plans,
     selectedPlans: Object.fromEntries(Object.keys(BATTLE_MAPS).map(id => [id,
       plans[id].some(plan => plan.id === saved.selectedPlans?.[id]) ? saved.selectedPlans[id] : plans[id][0].id])) };
 }

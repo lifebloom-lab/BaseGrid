@@ -52,7 +52,9 @@
 .battle-roster.drop-target { outline:2px solid var(--mint); outline-offset:2px; }
 .battle-map-toolbar { padding:18px 20px 10px; display:flex; justify-content:space-between; gap:16px; align-items:center; }
 .battle-map-toolbar h2 { font-size:1.1rem; }
-.battle-board-actions { display:flex; gap:8px; }
+.battle-board-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.battle-app .battle-checkbox { display:inline-flex; align-items:center; gap:7px; margin:0; min-height:42px; font-size:.78rem; cursor:pointer; white-space:nowrap; }
+.battle-app .battle-checkbox input { width:16px; height:16px; min-width:16px; padding:0; margin:0; accent-color:var(--mint); }
 .battle-board-actions .button { font-size:.75rem; min-height:42px; padding:9px 12px; }
 .battle-instructions { padding:4px 20px 14px; font-size:.8rem; color:var(--muted); min-height:36px; }
 .battle-selection { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:4px 20px 8px; padding:2px 12px; border:1px solid #9ae7c16b; border-radius:8px; background:#9ae7c112; font-size:.85rem; }
@@ -68,11 +70,15 @@
 #battle-canvas { display:block; width:100%; height:auto; }
 .battle-zones { position:absolute; inset:0; }
 .battle-zone { position:absolute; border:0; border-radius:5px; padding:0; background:transparent; min-height:28px; color:#17352c; display:flex; align-items:center; justify-content:center; }
+.battle-zone.has-power { flex-direction:column; }
+.battle-zone-power { position:relative; flex:none; max-width:100%; padding:1px 3px; text-align:center; font-size:10px; line-height:13px; font-weight:700; font-variant-numeric:tabular-nums; pointer-events:none; }
+.has-power .battle-zone-players { min-height:0; max-height:none; flex:1; align-content:safe center; }
 .battle-zone-target { position:absolute; inset:0; width:100%; height:100%; border:0; padding:0; border-radius:inherit; color:inherit; background:transparent; }
 .battle-zone-players { position:relative; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:2px 3px; width:100%; max-height:100%; overflow:auto; list-style:none; margin:auto; padding:2px 3px; }
 .battle-chip { display:flex; align-items:center; min-width:0; max-width:100%; border:0; border-radius:18px; background:#eaf4ee; box-shadow:inset 0 0 0 1px #9ab9aa; }
 .battle-chip:has(.battle-chip-name[aria-pressed=true]) { background:#c8f1dd; box-shadow:inset 0 0 0 1.5px #087954; }
 .battle-chip-name { flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; padding:2px 2px 2px 7px; border:0; border-radius:inherit; background:transparent; color:#142b23; font-size:11px; font-weight:650; line-height:16px; text-align:left; cursor:grab; touch-action:none; }
+.battle-chip-power { display:inline-block; margin-left:5px; padding-left:5px; border-left:1px solid #b4cabe; font-size:10px; font-weight:500; color:#36554a; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .battle-chip-remove { display:flex; align-items:center; justify-content:center; flex:0 0 20px; width:20px; height:20px; padding:0; border:0; border-radius:50%; color:#496359; background:transparent; line-height:0; appearance:none; }
 .battle-chip-remove svg { display:block; flex:none; width:16px; height:16px; pointer-events:none; }
 .battle-chip-remove:hover { color:#992f2a; background:#f9dcd8; }
@@ -104,6 +110,7 @@
 .battle-export-dialog { width:min(1300px,calc(100% - 24px)); max-width:calc(100vw - 24px); max-height:94dvh; overflow:auto; background:var(--panel); color:var(--text); border:1px solid #58746a; border-radius:14px; padding:20px; }
 .battle-export-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
 #battle-export-image { display:block; width:100%; height:auto; }
+#battle-zone-count { text-align:right; }
 @media(max-width:900px) {
   .battle-app main { padding:20px 16px 32px; }
   .battle-header { padding:16px; }

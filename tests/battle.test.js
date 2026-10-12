@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { formatBattlePower, battleZonePower, battleZonePowerLabel } from '../battle-model.js';
 import { ALLIES, battlePlayer, battleCounts, playerZones, BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
@@ -50,6 +51,7 @@ test('multiple named plans round-trip independently for each event and remember 
   const storage = memoryStorage([['basegrid.workspace.v1', 'formation unchanged'], ['basegrid.rosters.v1', 'cache unchanged']]);
   let state = loadBattles(storage);
   state.playerSort = 'power';
+  state.showPower = false;
   state = updateBattlePlan(state, assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power'));
   const teamA = structuredClone(currentBattle(state));
   state = createBattlePlan(state, 'Team B', { id: 'canyon-b' });
@@ -63,6 +65,7 @@ test('multiple named plans round-trip independently for each event and remember 
   let restored = loadBattles(storage);
   assert.equal(restored.selectedMap, 'desert');
   assert.equal(restored.playerSort, 'power');
+  assert.equal(restored.showPower, false);
   assert.equal(currentBattle(restored).id, 'desert-b');
   assert.equal(playerZone(currentBattle(restored), 'lastwar:2'), 'hospital-1');
   restored = selectBattlePlan(restored, 'canyon');
@@ -396,4 +399,24 @@ test('all image zones are unique, normalized, and inside their supplied template
     assert.equal(new Set(map.zones.map(zone => zone.id)).size, map.zones.length);
     for (const { rect: [x, y, w, h] } of map.zones) assert.ok(x >= 0 && y >= 0 && w > 0 && h > 0 && x + w <= 1 && y + h <= 1);
   }
+});
+
+test('building power distinguishes zero, missing values and Allies and updates only affected occurrences', () => {
+  let plan = fresh();
+  for (const player of plan.players) plan = assignBattlePlayer(plan, 'canyon', player.id, 'data-1');
+  plan = assignBattlePlayer(plan, 'canyon', ALLIES.id, 'data-1');
+  plan = assignBattlePlayer(plan, 'canyon', 'lastwar:1', 'power');
+  assert.deepEqual(battleZonePower(plan, 'data-1'), { total: 123456789, playerCount: 3, missingCount: 1, allies: true });
+  assert.equal(battleZonePowerLabel(battleZonePower(plan, 'data-1')), '123.5M known · 3 players · 1 unknown · Allies');
+  assert.equal(battleZonePower(plan, 'power').total, 123456789);
+  plan = assignBattlePlayer(plan, 'canyon', 'lastwar:1', null, 'data-1');
+  assert.equal(battleZonePower(plan, 'data-1').total, 0, 'zero is known power');
+  assert.equal(battleZonePower(plan, 'power').total, 123456789, 'other assignment survives removal');
+  plan = assignBattlePlayer(plan, 'canyon', 'lastwar:2', 'virus', 'data-1');
+  assert.equal(battleZonePowerLabel(battleZonePower(plan, 'data-1')), '— · 1 player · 1 unknown · Allies');
+  assert.equal(battleZonePowerLabel(battleZonePower(plan, 'virus')), '0 · 1 player');
+  assert.equal(battleZonePowerLabel(battleZonePower(assignBattlePlayer(emptyBattle(), 'canyon', ALLIES.id, 'power'), 'power')), '— · Allies');
+  assert.equal(formatBattlePower(123456789, true), '123,456,789');
+  for (const missing of [null, undefined, -1, NaN, '100']) assert.equal(formatBattlePower(missing), '—');
+  assert.equal(loadBattles(memoryStorage()).showPower, true);
 });

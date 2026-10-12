@@ -1,4 +1,4 @@
-import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattles, loadBattles, normalizeBattles } from './battle-model.js?v=2';
+import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattles, loadBattles, normalizeBattles } from './battle-model.js?v=20261012-power';
 import { STORAGE_KEY, DEFAULT_DRAFT, loadWorkspace } from './storage.js';
 import { ROSTER_CACHE_KEY, normalizeRosterLibrary } from './roster-cache.js?v=2';
 import { serializeSession } from './placement.js';
@@ -114,7 +114,7 @@ export function prepareDataImport(storage, input, { includeFormation = false } =
     }
     // Keep the recipient's view preferences unless this is a fresh library.
     if (read(BATTLE_KEY) === null && read(LEGACY_BATTLE_KEY) === null) {
-      current.selectedMap = backup.battles.selectedMap; current.playerSort = backup.battles.playerSort;
+      current.selectedMap = backup.battles.selectedMap; current.playerSort = backup.battles.playerSort; current.showPower = backup.battles.showPower;
     }
     changes.set(BATTLE_KEY, JSON.stringify(normalizeBattles(current)));
   }

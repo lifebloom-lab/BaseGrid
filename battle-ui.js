@@ -1,12 +1,9 @@
 import { setupDataTransfer } from './data-transfer-ui.js';
-import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts } from './battle-model.js';
-import { drawBattle } from './battle-render.js';
+import { ALLIES, BATTLE_MAPS, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-power';
+import { drawBattle } from './battle-render.js?v=20261012-power';
 import { loadWorkspace } from './storage.js';
 import { playersFromDraft } from './players.js';
 import { createRosterCache } from './roster-cache.js';
-
-const compactPower = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
-const exactPower = new Intl.NumberFormat('en');
 
 const $ = id => document.getElementById(id);
 const make = (tag, className, text) => {
@@ -61,6 +58,7 @@ function syncSettings() {
   }));
   $('battle-plan').value = plan().id;
   $('battle-sort').value = state.playerSort;
+  $('battle-show-power').checked = state.showPower;
 }
 function openedPlan(message) {
   selectedPlayer = null; cancelDrag(); selectedZone = map().zones[0].id; lastDraw = null;
@@ -140,9 +138,9 @@ function playerButton(player, sourceZone = null) {
   const meta = make('span', 'battle-player-meta');
   if (player.hqLevel) meta.append(make('span', '', 'HQ ' + player.hqLevel));
   if (player.group) { const badge = make('span', 'rank-badge', 'R' + player.group); badge.dataset.rank = player.group; meta.append(badge); }
-  if (player.power !== null && player.power !== undefined) {
-    const power = make('span', 'battle-player-power', 'Power ' + compactPower.format(player.power));
-    power.title = 'Power ' + exactPower.format(player.power);
+  if (player.id !== ALLIES.id) {
+    const power = make('span', 'battle-player-power', 'Power ' + formatBattlePower(player.power));
+    power.title = powerDescription(player);
     button.setAttribute('aria-description', power.title);
     meta.append(power);
   }
@@ -223,7 +221,7 @@ function renderTeam() {
   selectedZone = zone.id;
   const ids = plan().assignments[zone.id] ?? [];
   $('battle-zone-title').textContent = zone.name;
-  $('battle-zone-count').textContent = ids.length + ' assigned';
+  $('battle-zone-count').textContent = ids.length ? battleZonePowerLabel(battleZonePower(plan(), zone.id)) : '0 assigned';
   const select = $('battle-zone-select');
   select.replaceChildren(...map().zones.map(zone => { const option = make('option', '', zone.name); option.value = zone.id; return option; }));
   select.value = zone.id;
@@ -242,6 +240,10 @@ function renderTeam() {
   for (const button of $('battle-zones').children) button.classList.toggle('active', button.dataset.zone === zone.id);
 }
 
+function powerDescription(player) {
+  return player.id === ALLIES.id ? 'Allies power is unknown' : formatBattlePower(player.power) === '—' ? 'Power unavailable' : 'Power ' + formatBattlePower(player.power, true);
+}
+
 function zoneControl(zone, canvas, snapshot) {
   const container = make('div', 'battle-zone');
   container.dataset.zone = zone.id;
@@ -257,6 +259,14 @@ function zoneControl(zone, canvas, snapshot) {
   target.title = zone.name + ' · Select team or drop names here';
   if (!zone.names.length) target.append(make('span', 'zone-placeholder', '+ Names'));
   container.append(target);
+  if (state.showPower && zone.names.length) {
+    container.classList.add('has-power');
+    const power = battleZonePowerLabel(battleZonePower(snapshot, zone.id));
+    const summary = make('span', 'battle-zone-power', power);
+    summary.title = 'Assigned power · ' + power;
+    target.setAttribute('aria-label', zone.name + ', ' + power);
+    container.append(summary);
+  }
   container.addEventListener('click', event => {
     if (event.target.closest('.battle-chip')) return;
     if (selectedPlayer) assign(selectedPlayer, zone.id, selectedFromZone);
@@ -268,10 +278,13 @@ function zoneControl(zone, canvas, snapshot) {
       const player = battlePlayer(snapshot, id);
       if (!player) continue;
       const chip = make('li', 'battle-chip');
-      const name = make('button', 'battle-chip-name', player.name); name.type = 'button';
+      const name = make('button', 'battle-chip-name'); name.type = 'button';
+      name.append(make('span', 'battle-chip-label', player.name));
+      if (state.showPower && player.id !== ALLIES.id) name.append(make('span', 'battle-chip-power', formatBattlePower(player.power)));
       name.dataset.playerId = id; name.setAttribute('aria-label', 'Select ' + player.name);
+      name.setAttribute('aria-description', powerDescription(player));
       name.dataset.sourceZone = zone.id;
-      name.setAttribute('aria-pressed', String(selectedPlayer === id && selectedFromZone === zone.id)); name.title = player.name + ' · Drag or select to move';
+      name.setAttribute('aria-pressed', String(selectedPlayer === id && selectedFromZone === zone.id)); name.title = player.name + ' · ' + powerDescription(player) + ' · Drag or select to move';
       name.addEventListener('click', () => choosePlayer(id, zone.id));
       const remove = make('button', 'battle-chip-remove'); remove.type = 'button'; remove.dataset.playerId = id;
       const label = 'Remove ' + player.name + ' from ' + zone.name; remove.setAttribute('aria-label', label); remove.title = label;
@@ -364,6 +377,10 @@ $('battle-search').addEventListener('input', renderPlayers);
 $('battle-sort').addEventListener('change', () => {
   state.playerSort = $('battle-sort').value;
   persist(); renderPlayers();
+});
+$('battle-show-power').addEventListener('change', () => {
+  state.showPower = $('battle-show-power').checked;
+  persist(); renderMap();
 });
 $('battle-unassigned-tab').addEventListener('click', () => { poolOnly = true; renderPlayers(); });
 $('battle-all-tab').addEventListener('click', () => { poolOnly = false; renderPlayers(); });
