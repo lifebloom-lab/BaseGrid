@@ -1,4 +1,4 @@
-import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattles, loadBattles, normalizeBattles, restoreBattleLibraryPowers } from './battle-model.js?v=20261012-player-links';
+import { BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattles, loadBattles, normalizeBattles, restoreBattleLibraryPowers } from './battle-model.js?v=20261021-reserve';
 import { STORAGE_KEY, DEFAULT_DRAFT, loadWorkspace } from './storage.js';
 import { ROSTER_CACHE_KEY, normalizeRosterLibrary } from './roster-cache.js?v=2';
 import { serializeSession } from './placement.js';

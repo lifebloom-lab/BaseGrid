@@ -1,8 +1,8 @@
-import { BATTLE_KEY, LEGACY_BATTLE_KEY, loadBattles, linkBattleRoster } from './battle-model.js?v=20261012-player-links';
+import { BATTLE_KEY, LEGACY_BATTLE_KEY, loadBattles, linkBattleRoster } from './battle-model.js?v=20261021-reserve';
 import { STORAGE_KEY, loadWorkspace } from './storage.js';
 import { ROSTER_CACHE_KEY, normalizeRosterLibrary } from './roster-cache.js?v=20261012-update';
-import { normalizeImportedPlayer, playerSourceId } from './players.js?v=20261012-player-links';
-import { DATA_IMPORT_KEY, commitDataImport } from './data-transfer.js?v=20261012-player-links';
+import { normalizeImportedPlayer, playerSourceId } from './players.js?v=20261021-reserve';
+import { DATA_IMPORT_KEY, commitDataImport } from './data-transfer.js?v=20261021-reserve';
 
 const allianceId = id => typeof id === 'string' && /^[a-f\d]{32}$/i.test(id);
 

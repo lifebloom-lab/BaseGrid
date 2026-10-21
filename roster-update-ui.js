@@ -1,9 +1,9 @@
 import { fetchMembers } from './lastwar-api.js';
 import { setupSavedApiKey } from './api-key.js?v=20261012-key';
 import { loadWorkspace } from './storage.js';
-import { currentBattle, loadBattles, normalizeBattles } from './battle-model.js?v=20261012-player-links';
-import { rosterContextLabels } from './players.js?v=20261012-player-links';
-import { readRosterLibrary, rosterUpdateSources, prepareRosterUpdate, commitRosterUpdate } from './roster-update.js?v=20261012-player-links';
+import { currentBattle, loadBattles, normalizeBattles } from './battle-model.js?v=20261021-reserve';
+import { rosterContextLabels } from './players.js?v=20261021-reserve';
+import { readRosterLibrary, rosterUpdateSources, prepareRosterUpdate, commitRosterUpdate } from './roster-update.js?v=20261021-reserve';
 
 export function setupRosterUpdate({ getState, onUpdated }) {
   const $ = id => document.getElementById(id);

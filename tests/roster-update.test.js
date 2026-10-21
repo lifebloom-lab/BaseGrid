@@ -46,6 +46,19 @@ function savedPlans() {
   return storage;
 }
 
+test('roster updates and shared backups preserve each plan’s reserve choices', () => {
+  const storage = savedPlans();
+  const state = loadBattles(storage);
+  state.plans.canyon[0].players[0].reserve = true;
+  saveBattles(storage, state);
+  commitRosterUpdate(storage, prepareRosterUpdate(storage, entry(fresh)));
+  const restored = parseDataBackup(JSON.stringify(exportDataBackup(storage))).battles;
+  assert.equal(restored.plans.canyon[0].players[0].reserve, true);
+  assert.equal(restored.plans.canyon[0].players[0].power, 250);
+  assert.equal(restored.plans.canyon[1].players[0].reserve, undefined);
+  assert.deepEqual(restored.plans.canyon[0].assignments, state.plans.canyon[0].assignments);
+});
+
 test('stats updates use imported IDs, accept zero/decreases, retain missing stats and never rename or add players', () => {
   const original = [...players, { id: 'manual:1', name: 'Aurora', power: 12 }];
   const updated = refreshPlayerStats(original, fresh);

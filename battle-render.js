@@ -1,7 +1,42 @@
-import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261012-player-links';
+import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261021-reserve';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const HEADER = 108;
+
+// Shared vector strokes keep the editor icons and exported PNG consistent.
+const ROLE_PATHS = {
+  main: [
+    [['M',14.5,17.5],['L',3,6],['L',3,3],['L',6,3],['L',17.5,14.5]],
+    [['M',13,19],['L',19,13]], [['M',16,16],['L',20,20]], [['M',19,21],['L',21,19]],
+    [['M',14.5,6.5],['L',18,3],['L',21,3],['L',21,6],['L',17.5,9.5]],
+    [['M',5,14],['L',10,19]], [['M',7,17],['L',4,20]], [['M',3,19],['L',5,21]],
+  ],
+  reserve: [
+    [['M',20,11],['C',19.5,6,14,3,9.5,5],['C',7.5,6,6,7.5,5,9]],
+    [['M',5,4],['L',5,9],['L',10,9]],
+    [['M',4,13],['C',4.5,18,10,21,14.5,19],['C',16.5,18,18,16.5,19,15]],
+    [['M',19,20],['L',19,15],['L',14,15]],
+  ],
+};
+export function battleRoleIcon(reserve = false) {
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false' })) icon.setAttribute(key, value);
+  for (const commands of ROLE_PATHS[reserve ? 'reserve' : 'main']) {
+    const path = document.createElementNS(icon.namespaceURI, 'path');
+    path.setAttribute('d', commands.map(command => command.join(' ')).join(' ')); icon.append(path);
+  }
+  return icon;
+}
+function drawRoleIcon(ctx, reserve, x, y, size) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(size / 24, size / 24);
+  ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const commands of ROLE_PATHS[reserve ? 'reserve' : 'main']) {
+    ctx.beginPath();
+    for (const [command, ...points] of commands) ctx[{ M: 'moveTo', L: 'lineTo', C: 'bezierCurveTo' }[command]](...points);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
 function drawDesertTitle(ctx, width, height) {
   // Cover the template's blank title area; draw in shared map/export coordinates.
@@ -64,9 +99,10 @@ export function drawBattle(map, plan, image, { editing = false, displayWidth = i
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const measure = (name, size) => { ctx.font = '600 ' + size + 'px ' + FONT; return ctx.measureText(name).width; };
+  const measureWithRole = (name, size) => measure(name, size) + size * 1.15;
   // Three capsule rows, the power summary, and the add button in screen pixels.
   const minimumCardBody = editing ? 120 * width / Math.max(1, displayWidth) : 0;
-  const zones = layoutBattleZones(map, plan, width, height, measure, { minimumCardBody }).map(zone => ({ ...zone, y: zone.y + HEADER }));
+  const zones = layoutBattleZones(map, plan, width, height, measureWithRole, { minimumCardBody }).map(zone => ({ ...zone, y: zone.y + HEADER }));
   const counts = battleCounts(plan);
   canvas.width = width;
   canvas.height = height + HEADER;
@@ -84,7 +120,14 @@ export function drawBattle(map, plan, image, { editing = false, displayWidth = i
   ctx.font = '500 28px ' + FONT;
   ctx.textAlign = 'right';
   ctx.fillStyle = '#b0c7c0';
-  ctx.fillText(plan.players.length ? counts.assigned + ' / ' + plan.players.length + ' assigned · BaseGrid' : counts.alliesZones ? 'Allies · BaseGrid' : 'BaseGrid', width - 32, HEADER / 2);
+  const hasReserves = plan.players.some(player => player.reserve);
+  ctx.fillText(plan.players.length ? counts.assigned + ' / ' + plan.players.length + ' assigned · BaseGrid' : counts.alliesZones ? 'Allies · BaseGrid' : 'BaseGrid', width - 32, hasReserves ? 32 : HEADER / 2);
+  if (hasReserves) {
+    ctx.textAlign = 'left'; ctx.font = '500 26px ' + FONT;
+    for (const [reserve, label, x, color] of [[false, 'Main', width - 310, '#a5e4c7'], [true, 'Reserve', width - 170, '#dcc0ff']]) {
+      ctx.fillStyle = color; drawRoleIcon(ctx, reserve, x, 64, 28); ctx.fillText(label, x + 36, 78);
+    }
+  }
   ctx.textAlign = 'center';
   if (map.id === 'desert') drawDesertTitle(ctx, width, height);
   for (const zone of zones) {
@@ -118,8 +161,13 @@ export function drawBattle(map, plan, image, { editing = false, displayWidth = i
         ctx.lineTo(zone.x + zone.w - zone.padding, textY + y); ctx.stroke();
       }
       ctx.font = '600 ' + zone.text.fontSize + 'px ' + FONT;
-      for (const item of zone.text.items) {
-        item.lines.forEach((line, index) => ctx.fillText(line, textX + item.x, textY + item.y + index * zone.text.lineHeight));
+      for (const [index, item] of zone.text.items.entries()) {
+        const player = plan.players.find(player => player.id === plan.assignments[zone.id]?.[index]);
+        const inset = player ? zone.text.fontSize * 1.15 : 0;
+        const lineWidth = Math.max(...item.lines.map(line => measure(line, zone.text.fontSize)));
+        ctx.fillStyle = player?.reserve ? '#64318d' : '#142b23';
+        if (player) drawRoleIcon(ctx, player.reserve, textX + item.x - (lineWidth + inset) / 2, textY + item.y - zone.text.fontSize * .45, zone.text.fontSize * .9);
+        item.lines.forEach((line, lineIndex) => ctx.fillText(line, textX + item.x + inset / 2, textY + item.y + lineIndex * zone.text.lineHeight));
       }
     }
   }

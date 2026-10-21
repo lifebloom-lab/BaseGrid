@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatBattlePower, battleZonePower, battleZonePowerLabel } from '../battle-model.js';
-import { deleteBattlePlan, normalizeBattles, restoreBattleLibraryPowers, linkBattlePlayer, linkBattleRoster } from '../battle-model.js';
+import { deleteBattlePlan, normalizeBattles, restoreBattleLibraryPowers, setBattlePlayerReserve, linkBattlePlayer, linkBattleRoster } from '../battle-model.js';
 import { ALLIES, battlePlayer, battleCounts, playerZones, BATTLE_KEY, LEGACY_BATTLE_KEY, BATTLE_MAPS, emptyBattle, emptyBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, suggestedBattleTitle, normalizeBattle, mergeBattlePlayers, restoreBattlePowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZone, layoutNames, layoutBattleZones } from '../battle-model.js';
 
 const roster = [
@@ -338,6 +338,33 @@ test('invalid saved assignments are rejected instead of attaching names to the w
   assert.throws(() => normalizeBattle({ ...fresh(), assignments: { power: ['lastwar:1', 'lastwar:1'] } }, 'canyon'));
   assert.throws(() => normalizeBattle({ ...fresh(), players: [roster[0], roster[0]] }, 'canyon'));
   assert.throws(() => loadBattles({ getItem: () => '{bad json' }));
+});
+
+test('reserve is per plan, follows linked aliases, and survives save, duplicate and roster refresh', () => {
+  let plan = assignBattlePlayer(fresh(), 'canyon', 'lastwar:1', 'power');
+  plan.players.push({ id: 'manual:alias', name: 'Captain', sourcePlayerId: 'lastwar:1', power: 100 });
+  plan = assignBattlePlayer(plan, 'canyon', 'manual:alias', 'virus');
+  const reserve = setBattlePlayerReserve(plan, 'manual:alias', true);
+  assert.equal(reserve.players[0].reserve, true);
+  assert.equal(reserve.players.at(-1).reserve, true);
+  assert.equal(plan.players[0].reserve, undefined);
+  assert.deepEqual(reserve.assignments, plan.assignments);
+  assert.equal(setBattlePlayerReserve(reserve, 'lastwar:1', true), reserve);
+  assert.equal(setBattlePlayerReserve(reserve, ALLIES.id, true), reserve);
+  const imported = mergeBattlePlayers(reserve, [{ ...roster[0], name: 'New name', power: 200 }]);
+  assert.equal(imported.players[0].reserve, true);
+  assert.equal(imported.players.at(-1).reserve, true);
+  assert.equal(imported.players.at(-1).power, 200);
+  const state = updateBattlePlan(emptyBattles(), imported);
+  const duplicated = createBattlePlan(state, 'Team B', { duplicate: true, id: 'reserve-copy' });
+  const mainCopy = updateBattlePlan(duplicated, setBattlePlayerReserve(currentBattle(duplicated), 'lastwar:1', false));
+  const storage = memoryStorage(); saveBattles(storage, mainCopy);
+  const saved = loadBattles(storage);
+  assert.equal(saved.plans.canyon[0].players[0].reserve, true);
+  assert.equal(currentBattle(saved).players[0].reserve, undefined);
+  assert.equal(currentBattle(saved).players.at(-1).reserve, undefined);
+  assert.deepEqual(saved.plans.canyon[0].assignments, currentBattle(saved).assignments);
+  assert.equal(mergeBattlePlayers(currentBattle(saved), [{ ...roster[0], reserve: true }]).players[0].reserve, undefined, 'imports cannot change the chosen role');
 });
 
 test('players can cover several zones; adding, moving and removing preserve the other occurrences', () => {

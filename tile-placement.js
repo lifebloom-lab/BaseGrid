@@ -1,6 +1,6 @@
 import { createSession, getFormation } from './placement.js';
 import { normalizeGridLayout, resolveGridLayout, layoutFromSlots, gridCoordinates, previewGridMove } from './grid-layout.js';
-import { playersFromDraft } from './players.js?v=20261012-player-links';
+import { playersFromDraft } from './players.js?v=20261021-reserve';
 
 function coordinates(value) {
   if (!value || !Number.isSafeInteger(value.x) || !Number.isSafeInteger(value.y)) throw new Error('Saved placement coordinates are invalid.');

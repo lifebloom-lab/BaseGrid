@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261012-key">
-  <link rel="stylesheet" href="./battle.css?v=20261012-player-links">
-  <script type="module" src="./battle-ui.js?v=20261012-player-links"></script>
+  <link rel="stylesheet" href="./battle.css?v=20261021-reserve">
+  <script type="module" src="./battle-ui.js?v=20261021-reserve"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=20261012-remove-roster">
 </head>
 <body class="battle-app">
@@ -36,6 +36,7 @@
           <label class="sr-only" for="battle-search">Search battle players</label><input id="battle-search" type="search" placeholder="Search players…" autocomplete="off">
           <div class="battle-pool-sort"><label for="battle-sort">Sort by</label><div class="battle-select"><select id="battle-sort"><option value="rank">Rank &amp; HQ</option><option value="power">Power · high to low</option><option value="name">Name · A–Z</option></select><svg class="battle-select-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
           <div class="battle-pool-tabs" role="group" aria-label="Player list"><button type="button" id="battle-unassigned-tab" aria-pressed="true">Unassigned <span id="battle-unassigned-count">0</span></button><button type="button" id="battle-all-tab" aria-pressed="false">All players</button></div>
+          <p id="battle-role-count" class="field-help"></p>
           <p id="battle-pool-empty" class="field-help"></p><ul id="battle-player-list" class="battle-player-list" aria-label="Battle players"></ul>
           <p class="field-help">Drag a name or select it, then choose a zone. Use All players to add the same name elsewhere. Drag a map capsule to move it.</p>
         </section>
@@ -45,6 +46,7 @@
           <div class="battle-map-toolbar"><div><h2 id="battle-map-name">Canyon Storm</h2><p id="battle-progress" class="field-help">0 assigned</p></div><div class="battle-board-actions"><label class="battle-checkbox"><input id="battle-show-power" type="checkbox" checked>Show power</label><button id="battle-undo" class="button secondary" type="button" disabled>Undo</button><button id="battle-zoom" class="button secondary" type="button" aria-pressed="false">Enlarge map</button></div></div>
           <div id="battle-selection" class="battle-selection" hidden><span id="battle-selection-name"></span><button id="battle-cancel-selection" type="button" class="text-button">Cancel</button></div>
           <p id="battle-status" class="battle-instructions" role="status" aria-live="polite">Tap + Names on a building, or drag players onto the map.</p>
+          <div class="battle-role-legend" aria-label="Player roles"><span id="battle-main-legend">Main</span><span id="battle-reserve-legend">Reserve</span><span class="battle-role-hint">Tap a player’s icon to switch.</span></div>
           <div id="battle-overflow" class="battle-overflow" role="status" hidden><p id="battle-overflow-text"></p></div>
           <div id="battle-map-scroll" class="battle-map-scroll" tabindex="0" role="region" aria-label="Battle map; scroll to explore">
             <div id="battle-map-stage" class="battle-map-stage"><canvas id="battle-canvas" aria-hidden="true"></canvas><div id="battle-zones" class="battle-zones" role="group" aria-label="Assignment zones"></div></div>

@@ -57,6 +57,21 @@
 .battle-player-meta { font-size:.7rem; color:var(--muted); display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
 .battle-player-meta .rank-badge { font-size:.65rem; }
 .battle-player-location { font-size:.7rem; color:var(--muted); }
+.battle-player-row { display:flex; align-items:center; gap:5px; flex:1; min-width:0; }
+.battle-player-row .battle-player { flex:1; min-width:0; }
+.battle-role-toggle { display:grid; place-items:center; flex:none; width:44px; height:44px; padding:0; border:1px solid #517866; border-radius:8px; background:#9ae7c10c; color:var(--mint); cursor:pointer; touch-action:manipulation; }
+.battle-role-toggle svg, .battle-role-legend svg { display:block; width:19px; height:19px; flex:none; pointer-events:none; }
+.battle-role-toggle:hover { background:#9ae7c12b; }
+.battle-role-toggle:focus-visible { outline:2px solid var(--mint); outline-offset:2px; }
+.battle-role-toggle.is-reserve { border-color:#9270ba; background:#ba93ec20; color:#dcc0ff; }
+.battle-role-toggle.is-reserve:hover { background:#ba93ec40; }
+.is-reserve .battle-role-label { color:#dcc0ff; }
+.battle-player-row.is-reserve .battle-player { border-color:#81649d; background:#ba93ec13; }
+.battle-player-row.is-reserve .battle-player[aria-pressed=true] { border-color:#dcc0ff; background:#ba93ec2b; }
+.battle-role-legend { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; padding:0 20px 12px; color:var(--mint); font-size:.75rem; }
+.battle-role-legend > span { display:inline-flex; align-items:center; gap:6px; }
+#battle-reserve-legend { color:#dcc0ff; }
+.battle-role-legend .battle-role-hint { color:var(--muted); }
 .battle-roster.drop-target { outline:2px solid var(--mint); outline-offset:2px; }
 .battle-map-toolbar { padding:18px 20px 10px; display:flex; justify-content:space-between; gap:16px; align-items:center; }
 .battle-map-toolbar h2 { font-size:1.1rem; }
@@ -89,6 +104,16 @@
 .battle-zone-add:focus-visible { outline:2px solid #087954; outline-offset:-2px; }
 .battle-chip { display:flex; align-items:center; min-width:0; max-width:100%; border:0; border-radius:18px; background:#eaf4ee; box-shadow:inset 0 0 0 1px #9ab9aa; }
 .battle-chip:has(.battle-chip-name[aria-pressed=true]) { background:#c8f1dd; box-shadow:inset 0 0 0 1.5px #087954; }
+.battle-chip.is-reserve { background:#f1e6ff; box-shadow:inset 0 0 0 1px #ad8bc9; }
+.battle-chip.is-reserve:has(.battle-chip-name[aria-pressed=true]) { background:#e2c9fa; box-shadow:inset 0 0 0 1.5px #64318d; }
+.battle-chip.is-reserve .battle-chip-name, .battle-chip.is-reserve .battle-chip-remove { color:#512775; }
+.battle-chip.is-reserve .battle-chip-power { border-color:#c7addd; color:#6b4a85; }
+.battle-role-toggle.compact { width:24px; height:24px; margin-left:2px; border:0; border-radius:50%; background:transparent; color:#36554a; }
+.battle-role-toggle.compact.is-reserve { color:#64318d; }
+.battle-role-toggle.compact:hover { background:#00000010; }
+.battle-role-toggle.compact svg { width:16px; height:16px; }
+.battle-role-toggle.compact + .battle-chip-name { padding-left:2px; }
+.battle-role-toggle.compact:focus-visible { outline-color:#64318d; outline-offset:-2px; }
 .battle-chip-name { flex:1; min-width:0; white-space:normal; overflow-wrap:anywhere; padding:2px 2px 2px 7px; border:0; border-radius:inherit; background:transparent; color:#142b23; font-size:11px; font-weight:650; line-height:16px; text-align:left; cursor:grab; touch-action:none; }
 .battle-chip-power { display:inline-block; margin-left:5px; padding-left:5px; border-left:1px solid #b4cabe; font-size:10px; font-weight:500; color:#36554a; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .battle-chip-remove { display:flex; align-items:center; justify-content:center; flex:0 0 20px; width:20px; height:20px; padding:0; border:0; border-radius:50%; color:#496359; background:transparent; line-height:0; appearance:none; }
@@ -96,6 +121,8 @@
 .battle-chip-remove:hover { color:#992f2a; background:#f9dcd8; }
 .battle-chip-name:focus-visible, .battle-chip-remove:focus-visible, .battle-zone-target:focus-visible { outline:2px solid #087954; outline-offset:-2px; }
 @media(pointer:coarse) {
+  .battle-role-toggle.compact { width:36px; height:36px; }
+  .battle-role-toggle.compact svg { width:20px; height:20px; }
   .battle-chip-name { padding-top:4px; padding-bottom:4px; }
   .battle-chip-remove { flex-basis:24px; width:24px; height:24px; }
   .battle-chip-remove svg { width:18px; height:18px; }
@@ -153,6 +180,10 @@ html:has(#battle-picker-dialog[open]) { overflow:hidden; }
 .battle-picker-list-heading select { height:44px; font-size:.8rem; background:transparent; border-color:transparent; padding-left:8px; }
 .battle-picker-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:8px 12px; }
 #battle-picker-list { list-style:none; padding:0; margin:0; }
+.battle-picker-entry { display:flex; align-items:center; gap:4px; }
+.battle-picker-entry .battle-picker-row { flex:1; min-width:0; }
+.battle-picker-entry.is-reserve { background:#ba93ec0c; border-radius:10px; }
+.battle-picker-entry > .battle-role-toggle { margin-right:6px; }
 #battle-link-list { list-style:none; padding:0; margin:0; }
 #battle-link-dialog p { line-height:1.4; font-size:.875rem; }
 #battle-link-dialog label:not(.battle-picker-row) { margin-top:12px; }

@@ -1,5 +1,5 @@
-import { setupDataTransfer } from './data-transfer-ui.js?v=20261012-player-links';
-import { parseManualPlayers, playersFromDraft, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js?v=20261012-player-links';
+import { setupDataTransfer } from './data-transfer-ui.js?v=20261021-reserve';
+import { parseManualPlayers, playersFromDraft, playerDetails, normalizeImportedPlayer, rosterContextLabels, sortPoolPlayers } from './players.js?v=20261021-reserve';
 import { tileKey } from './free-formation.js';
 import { gridCanvas, previewGridMove } from './grid-layout.js';
 import { DEFAULT_DRAFT, saveWorkspace, loadWorkspace, clearWorkspace } from './storage.js';

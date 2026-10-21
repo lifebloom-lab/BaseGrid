@@ -11,14 +11,15 @@ test('Canyon editor and export preserve the original panel colors', t => {
     else globalThis.document = originalDocument;
   });
   globalThis.document = { createElement: () => {
-    const fills = [], labels = [];
+    const fills = [], labels = [], labelColors = [];
     const context = {
       measureText: text => ({ width: text.length * 18 }),
       fillRect(x, y, w, h) { fills.push({ x, y, w, h, color: this.fillStyle }); },
-      fillText(text) { labels.push(text); },
+      fillText(text) { labels.push(text); labelColors.push(this.fillStyle); },
       drawImage() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+      save() {}, restore() {}, translate() {}, scale() {}, bezierCurveTo() {},
     };
-    drawings.push({ fills, labels });
+    drawings.push({ fills, labels, labelColors });
     return { getContext: () => context };
   } };
   const plan = { ...emptyBattle(), players: [{ id: 'player:1', name: 'Aurora' }], assignments: { 'serum-1': ['player:1'] } };
@@ -47,5 +48,15 @@ test('Canyon editor and export preserve the original panel colors', t => {
   assert.equal(alliesOnly.assigned, 0);
   assert.equal(alliesOnly.placementCount, 1, 'an Allies-only map can be exported');
   assert.ok(drawings[3].labels.includes('Allies'));
+
+  reused.players[0] = { ...reused.players[0], reserve: true, power: 180000000 };
+  drawBattle(BATTLE_MAPS.canyon, reused, image);
+  const reserved = drawings[4];
+  assert.ok(reserved.labels.includes('Main') && reserved.labels.includes('Reserve'), 'export explains both role icons');
+  assert.equal(reserved.labels.filter(label => label === 'Aurora').length, 2, 'every assignment uses the player’s role');
+  assert.equal(reserved.labelColors[reserved.labels.indexOf('Aurora')], '#64318d');
+  assert.equal(reserved.labelColors[reserved.labels.indexOf('Allies')], '#142b23');
+  assert.ok(!reserved.labels.some(label => String(label).includes('180')), 'power is still excluded from exports');
+  assert.equal(reserved.fills.length, 1, 'reserve styling preserves the Canyon background');
 
 });

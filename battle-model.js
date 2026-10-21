@@ -1,4 +1,4 @@
-import { normalizeImportedPlayer, sortPoolPlayers, playerSourceId } from './players.js?v=20261012-player-links';
+import { normalizeImportedPlayer, sortPoolPlayers, playerSourceId } from './players.js?v=20261021-reserve';
 
 export const BATTLE_KEY = 'basegrid.battles.v2';
 export const LEGACY_BATTLE_KEY = 'basegrid.battles.v1';
@@ -78,7 +78,25 @@ export function cleanBattlePlayer(player) {
   const { hqLevel, group } = normalizeImportedPlayer(player);
   const sourcePlayerId = playerSourceId(player);
   return { id: player.id, name: player.name.trim(), hqLevel, group, power: validPower(player.power) ? player.power : null,
+    ...(player.reserve === true ? { reserve: true } : {}),
     ...(sourcePlayerId && sourcePlayerId !== player.id ? { sourcePlayerId } : {}) };
+}
+
+// A role belongs to this plan. Linked copies of the same player share it.
+export function setBattlePlayerReserve(plan, playerId, reserve) {
+  const selected = plan.players.find(player => player.id === playerId);
+  if (!selected) return plan;
+  const sourceId = playerSourceId(selected);
+  let changed = false;
+  const players = plan.players.map(player => {
+    if (player.id !== playerId && (!sourceId || playerSourceId(player) !== sourceId)) return player;
+    if ((player.reserve === true) === reserve) return player;
+    changed = true;
+    const next = { ...player };
+    if (reserve) next.reserve = true; else delete next.reserve;
+    return next;
+  });
+  return changed ? { ...plan, players } : plan;
 }
 
 const rosterNameKey = name => name.trim().normalize('NFKC').toLocaleLowerCase('en');
@@ -304,6 +322,10 @@ export function mergeBattlePlayers(plan, incoming) {
     }
     if (aliases.length && !players.has(clean.id)) continue;
     const previous = players.get(clean.id);
+    // A roster refresh must not overwrite this plan's main/reserve choices.
+    if (previous) {
+      if (previous.reserve === true) clean.reserve = true; else delete clean.reserve;
+    }
     // Reusing an older roster must not erase power already known for this UID.
     if (clean.id.startsWith('lastwar:') && clean.power === null && validPower(previous?.power)) clean.power = previous.power;
     players.set(clean.id, clean);

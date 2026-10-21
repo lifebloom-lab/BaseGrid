@@ -1,11 +1,11 @@
-import { setupDataTransfer } from './data-transfer-ui.js?v=20261012-player-links';
-import { setupRosterUpdate } from './roster-update-ui.js?v=20261012-player-links';
+import { setupDataTransfer } from './data-transfer-ui.js?v=20261021-reserve';
+import { setupRosterUpdate } from './roster-update-ui.js?v=20261021-reserve';
 import { setupRosterImport } from './import-ui.js?v=20261012-remove-roster';
-import { refreshPlayerStats } from './roster-update.js?v=20261012-player-links';
-import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, linkBattlePlayer, linkBattleRoster, restoreBattleLibraryPowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261012-player-links';
-import { drawBattle } from './battle-render.js?v=20261012-room';
+import { refreshPlayerStats } from './roster-update.js?v=20261021-reserve';
+import { ALLIES, BATTLE_KEY, BATTLE_MAPS, emptyBattles, normalizeBattles, loadBattles, saveBattles, currentBattle, selectBattlePlan, updateBattlePlan, createBattlePlan, deleteBattlePlan, suggestedBattleTitle, mergeBattlePlayers, setBattlePlayerReserve, linkBattlePlayer, linkBattleRoster, restoreBattleLibraryPowers, sortBattlePlayers, assignBattlePlayer, reorderBattlePlayer, playerZones, battlePlayer, battleCounts, formatBattlePower, battleZonePower, battleZonePowerLabel } from './battle-model.js?v=20261021-reserve';
+import { drawBattle, battleRoleIcon } from './battle-render.js?v=20261021-reserve';
 import { loadWorkspace } from './storage.js';
-import { playersFromDraft, playerSourceId } from './players.js?v=20261012-player-links';
+import { playersFromDraft, playerSourceId } from './players.js?v=20261021-reserve';
 import { createRosterCache } from './roster-cache.js';
 
 const $ = id => document.getElementById(id);
@@ -180,7 +180,35 @@ function assign(id, zoneId, sourceZone = null) {
     change(next, player.name + (zoneId ? ' assigned to ' + map().zones.find(zone => zone.id === zoneId).name + '.' : ' removed from ' + map().zones.find(zone => zone.id === sourceZone).name + '.'));
   } catch (error) { showError(error.message); }
 }
+function roleToggle(player, { compact = false, sourceZone = null } = {}) {
+  const button = make('button', 'battle-role-toggle' + (compact ? ' compact' : ''));
+  button.type = 'button'; button.dataset.playerId = player.id;
+  button.classList.toggle('is-reserve', player.reserve === true);
+  button.setAttribute('aria-pressed', String(player.reserve === true));
+  button.setAttribute('aria-label', 'Mark ' + player.name + ' as ' + (player.reserve ? 'main' : 'reserve'));
+  button.title = (player.reserve ? 'Reserve' : 'Main') + ' · ' + button.getAttribute('aria-label');
+  button.append(battleRoleIcon(player.reserve));
+  button.addEventListener('click', () => {
+    const list = button.closest('ul');
+    const listId = list?.id;
+    const scrollTop = list?.parentElement?.scrollTop;
+    const reserve = !player.reserve;
+    change(setBattlePlayerReserve(plan(), player.id, reserve), player.name + ' is now ' + (reserve ? 'reserve' : 'main') + ' in this plan.');
+    if (picker) {
+      renderPicker();
+      $('battle-picker-list').parentElement.scrollTop = scrollTop ?? 0;
+    }
+    // Map focus is restored after its asynchronous redraw.
+    if (!sourceZone) {
+      const scope = document.getElementById(listId);
+      [...(scope?.querySelectorAll('.battle-role-toggle') ?? [])].find(node => node.dataset.playerId === player.id)?.focus({ preventScroll: true });
+    }
+  });
+  return button;
+}
 function playerButton(player, sourceZone = null) {
+  const row = make('div', 'battle-player-row');
+  row.classList.toggle('is-reserve', player.reserve === true);
   const button = make('button', 'battle-player');
   button.type = 'button';
   button.dataset.playerId = player.id;
@@ -193,6 +221,7 @@ function playerButton(player, sourceZone = null) {
   if (player.hqLevel) meta.append(make('span', '', 'HQ ' + player.hqLevel));
   if (player.group) { const badge = make('span', 'rank-badge', 'R' + player.group); badge.dataset.rank = player.group; meta.append(badge); }
   if (player.id !== ALLIES.id) {
+    meta.append(make('span', 'battle-role-label', player.reserve ? 'Reserve' : 'Main'));
     const power = make('span', 'battle-player-power', 'Power ' + formatBattlePower(player.power));
     power.title = powerDescription(player);
     button.setAttribute('aria-description', power.title);
@@ -203,7 +232,9 @@ function playerButton(player, sourceZone = null) {
   const location = player.id === ALLIES.id && !sourceZone ? 'Reusable label' : zones.join(' · ') || 'Unassigned';
   button.append(make('span', 'battle-player-location', location));
   button.addEventListener('click', () => choosePlayer(player.id, sourceZone));
-  return button;
+  row.append(button);
+  if (player.id !== ALLIES.id) row.append(roleToggle(player));
+  return row;
 }
 
 function fitPickerViewport() {
@@ -245,7 +276,8 @@ function renderPicker() {
   $('battle-picker-empty').hidden = Boolean(entries.length);
   $('battle-picker-empty').textContent = query ? 'No matching names. Try another search.' : 'Everyone is assigned. Choose All players to reuse a name.';
   $('battle-picker-list').replaceChildren(...entries.map((player, index) => {
-    const row = make('li');
+    const row = make('li', 'battle-picker-entry');
+    row.classList.toggle('is-reserve', player.reserve === true);
     const label = make('label', 'battle-picker-row');
     const added = already.has(player.id);
     label.classList.toggle('already-added', added);
@@ -260,12 +292,14 @@ function renderPicker() {
     if (player.group) { const badge = make('span', 'rank-badge', 'R' + player.group); badge.dataset.rank = player.group; meta.append(badge); }
     if (player.hqLevel) meta.append(make('span', '', 'HQ ' + player.hqLevel));
     if (player.id !== ALLIES.id) {
+      meta.append(make('span', 'battle-role-label', player.reserve ? 'Reserve' : 'Main'));
       const power = make('span', '', 'Power ' + formatBattlePower(player.power)); power.title = powerDescription(player); meta.append(power);
     }
     if (meta.children.length) details.append(meta);
     const locations = playerZones(plan(), player.id).map(id => map().zones.find(zone => zone.id === id).name);
     details.append(make('span', 'battle-picker-location', added ? 'Already here' : locations.length ? 'Also in ' + locations.join(', ') : player.id === ALLIES.id ? 'Reusable label' : 'Unassigned'));
     body.append(details); label.append(checkbox, body); row.append(label);
+    if (player.id !== ALLIES.id) row.append(roleToggle(player));
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) picker.ids.add(player.id); else picker.ids.delete(player.id);
       pickerCount();
@@ -405,6 +439,8 @@ function zoneControl(zone, canvas, snapshot) {
       const player = battlePlayer(snapshot, id);
       if (!player) continue;
       const chip = make('li', 'battle-chip');
+      chip.classList.toggle('is-reserve', player.reserve === true);
+      if (player.id !== ALLIES.id) chip.append(roleToggle(player, { compact: true, sourceZone: zone.id }));
       const name = make('button', 'battle-chip-name'); name.type = 'button';
       name.append(make('span', 'battle-chip-label', player.name));
       if (state.showPower && player.id !== ALLIES.id) name.append(make('span', 'battle-chip-power', formatBattlePower(player.power)));
@@ -440,7 +476,7 @@ async function renderMap() {
   const snapshot = structuredClone(plan());
   const focused = document.activeElement;
   const focusZone = focused.closest('.battle-zone')?.dataset.zone;
-  const focusClass = ['battle-chip-remove', 'battle-chip-name', 'battle-zone-add', 'battle-zone-target'].find(name => focused.classList.contains(name)) ?? 'battle-zone-target';
+  const focusClass = ['battle-role-toggle', 'battle-chip-remove', 'battle-chip-name', 'battle-zone-add', 'battle-zone-target'].find(name => focused.classList.contains(name)) ?? 'battle-zone-target';
   const focusIndex = focusZone ? [...focused.closest('.battle-zone').querySelectorAll('.' + focusClass)].indexOf(focused) : -1;
   const zoneScroll = new Map([...$('battle-zones').children].map(zone => [zone.dataset.zone, zone.querySelector('.battle-zone-players')?.scrollTop ?? 0]));
   $('battle-export').disabled = true;
@@ -473,6 +509,8 @@ function render() {
   const counts = battleCounts(plan());
   $('battle-map-name').textContent = map().name;
   $('battle-progress').textContent = counts.assigned + ' assigned · ' + counts.unassigned + ' unassigned' + (counts.alliesZones ? ' · Allies in ' + counts.alliesZones + (counts.alliesZones === 1 ? ' zone' : ' zones') : '');
+  const reserves = plan().players.filter(player => player.reserve).length;
+  $('battle-role-count').textContent = (plan().players.length - reserves) + ' main · ' + reserves + ' reserve';
   $('battle-undo').disabled = !planHistory().length;
   $('battle-reset').disabled = !Object.values(plan().assignments).some(ids => ids.length);
   const unlinked = unlinkedPlayers().length;
@@ -664,6 +702,8 @@ const savedRosterCandidates = rosterCandidates();
 for (const plans of Object.values(state.plans)) for (let index = 0; index < plans.length; index++) plans[index] = linkBattleRoster(plans[index], savedRosterCandidates);
 state = restoreBattleLibraryPowers(state, { rosters: createRosterCache().listRosters(), workspaces: [powerWorkspace] });
 syncSettings(); renderSource(); persist(); render();
+
+for (const [id, reserve] of [['battle-main-legend', false], ['battle-reserve-legend', true]]) $(id).prepend(battleRoleIcon(reserve));
 
 setupDataTransfer();
 setupRosterImport({
