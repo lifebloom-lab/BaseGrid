@@ -6,19 +6,19 @@ export const ALLIES = Object.freeze({ id: 'battle:allies', name: 'Allies' });
 const zone = (id, name, rect) => ({ id, name, rect });
 const desertZone = (id, name, label, color, rect, bottom) => ({ id, name, rect, card: { label, color, bottom } });
 export const BATTLE_MAPS = {
-  canyon: { id: 'canyon', name: 'Canyon Storm', image: 'battle-canyon.png', zones: [
-    zone('data-1', 'Data Center I', [.135, .197, .355, .055]),
-    zone('data-2', 'Data Center II', [.637, .197, .350, .055]),
-    zone('serum-1', 'Serum Factory I', [.020, .385, .258, .058]),
-    zone('power', 'Power Tower', [.300, .359, .396, .087]),
-    zone('defense-2', 'Defense System II', [.719, .359, .265, .087]),
-    zone('defense-1', 'Defense System I', [.020, .560, .258, .080]),
-    zone('virus', 'Virus Lab', [.300, .571, .396, .069]),
-    zone('serum-2', 'Serum Factory II', [.721, .580, .261, .060]),
-    zone('warehouse-1', 'Sample Warehouse I', [.020, .737, .230, .058]),
-    zone('warehouse-2', 'Sample Warehouse II', [.272, .737, .220, .058]),
-    zone('warehouse-3', 'Sample Warehouse III', [.509, .737, .226, .058]),
-    zone('warehouse-4', 'Sample Warehouse IV', [.756, .737, .226, .058]),
+  canyon: { id: 'canyon', name: 'Canyon Storm', image: 'battle-canyon.png?v=20261026-taller', zones: [
+    zone('data-1', 'Data Center I', [.1430, .1460, .3420, .1308]),
+    zone('data-2', 'Data Center II', [.6370, .1460, .3400, .1308]),
+    zone('serum-1', 'Serum Factory I', [.0212, .3785, .2822, .1168]),
+    zone('power', 'Power Tower', [.3298, .3641, .3422, .1312]),
+    zone('defense-2', 'Defense System II', [.7002, .3627, .2787, .1327]),
+    zone('defense-1', 'Defense System I', [.0212, .5912, .2822, .1291]),
+    zone('virus', 'Virus Lab', [.3298, .5948, .3422, .1255]),
+    zone('serum-2', 'Serum Factory II', [.7002, .5991, .2787, .1211]),
+    zone('warehouse-1', 'Sample Warehouse I', [.0212, .8003, .2240, .1154]),
+    zone('warehouse-2', 'Sample Warehouse II', [.2707, .8003, .2160, .1154]),
+    zone('warehouse-3', 'Sample Warehouse III', [.5132, .8003, .2205, .1154]),
+    zone('warehouse-4', 'Sample Warehouse IV', [.7557, .8003, .2231, .1154]),
   ] },
   desert: { id: 'desert', name: 'Desert Storm', image: 'battle-desert.png', zones: [
     desertZone('information', 'Information Center', 'CENTRO DE INFORMACIÓN', '#2154b6', [.230, .154, .224, .060], .255),

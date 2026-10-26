@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { drawBattle } from '../battle-render.js';
 import { ALLIES, BATTLE_MAPS, emptyBattle, assignBattlePlayer } from '../battle-model.js';
 
@@ -23,7 +24,9 @@ test('Canyon editor and export preserve the original panel colors', t => {
     return { getContext: () => context };
   } };
   const plan = { ...emptyBattle(), players: [{ id: 'player:1', name: 'Aurora' }], assignments: { 'serum-1': ['player:1'] } };
-  const image = { naturalWidth: 2842, naturalHeight: 2214 };
+  const artwork = readFileSync(new URL('../battle-canyon.png', import.meta.url));
+  const image = { naturalWidth: artwork.readUInt32BE(16), naturalHeight: artwork.readUInt32BE(20) };
+  assert.ok(image.naturalHeight > image.naturalWidth, 'Canyon uses the taller template');
   const editor = drawBattle(BATTLE_MAPS.canyon, plan, image, { editing: true });
   const exported = drawBattle(BATTLE_MAPS.canyon, plan, image);
   assert.equal(drawings[0].fills.length, 1, 'editor paints no rectangle over the template');
@@ -31,6 +34,13 @@ test('Canyon editor and export preserve the original panel colors', t => {
   assert.equal(drawings[1].fills.length, 1, 'export paints no rectangle over the template');
   assert.ok(drawings[1].labels.includes('Aurora'), 'the exported PNG includes the full player name');
   assert.deepEqual(editor.zones, exported.zones, 'both modes share the same safe map bounds');
+  assert.equal(exported.zones.length, 12);
+  for (const zone of exported.zones) {
+    assert.ok(zone.x >= 0 && zone.y >= 0 && zone.x + zone.w <= exported.canvas.width && zone.y + zone.h <= exported.canvas.height);
+    for (const other of exported.zones.filter(other => other.id !== zone.id)) {
+      assert.ok(zone.x + zone.w <= other.x || other.x + other.w <= zone.x || zone.y + zone.h <= other.y || other.y + other.h <= zone.y, zone.id + '/' + other.id);
+    }
+  }
   assert.deepEqual(plan.assignments, { 'serum-1': ['player:1'] });
 
   let reused = assignBattlePlayer(plan, 'canyon', 'player:1', 'power');

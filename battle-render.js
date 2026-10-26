@@ -1,4 +1,4 @@
-import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261021-reserve';
+import { battleCounts, layoutBattleZones } from './battle-model.js?v=20261026-taller';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const HEADER = 108;
