@@ -5,8 +5,8 @@
   <meta name="theme-color" content="#10191c"><meta name="robots" content="noindex">
   <title>Battle planner · BaseGrid Labs</title>
   <link rel="stylesheet" href="./styles.css?v=20261012-key">
-  <link rel="stylesheet" href="./battle.css?v=20261021-reserve">
-  <script type="module" src="./battle-ui.js?v=20261026-taller"></script>
+  <link rel="stylesheet" href="./battle.css?v=20261026-mobile-tokens">
+  <script type="module" src="./battle-ui.js?v=20261026-mobile-tokens"></script>
   <link rel="stylesheet" href="./data-transfer.css?v=20261012-remove-roster">
 </head>
 <body class="battle-app">
@@ -167,6 +167,16 @@
       <div class="battle-picker-scroll"><p id="battle-link-empty" hidden>No matching players. Try another name or UID.</p><ul id="battle-link-list" aria-label="Roster players to link"></ul></div>
       <div class="battle-picker-footer"><div class="battle-dialog-actions"><button id="battle-link-cancel" class="button secondary" type="button">Cancel</button><button id="battle-link-submit" class="button primary" type="submit" disabled>Link player</button></div></div>
     </form>
+  </dialog>
+  <dialog id="battle-zone-details-dialog" class="battle-dialog battle-picker" aria-labelledby="battle-zone-details-title" aria-describedby="battle-zone-details-summary">
+    <div class="battle-zone-details-content">
+      <div class="battle-picker-header">
+        <div class="battle-picker-heading"><div><h2 id="battle-zone-details-title" tabindex="-1"></h2><p id="battle-zone-details-summary"></p></div><button id="battle-zone-details-close" class="battle-picker-close" type="button" aria-label="Close team list"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg></button></div>
+        <p class="field-help">Tap a name, then choose a building to move it.</p>
+      </div>
+      <div class="battle-picker-scroll"><ul id="battle-zone-details-list" aria-label="Assigned players"></ul><p id="battle-zone-details-empty" hidden>No players assigned.</p></div>
+      <div class="battle-picker-footer"><button id="battle-zone-details-add" class="button primary" type="button">+ Names</button></div>
+    </div>
   </dialog>
   <dialog id="battle-picker-dialog" class="battle-dialog battle-picker" aria-labelledby="battle-picker-title" aria-describedby="battle-picker-context">
     <form id="battle-picker-form">

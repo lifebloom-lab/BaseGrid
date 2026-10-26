@@ -39,6 +39,7 @@ let lastDraw = null;
 let renderVersion = 0;
 let exportUrl = null;
 let picker = null;
+let zoneDetails = null;
 let rosterUpdater = null;
 let playerLink = null;
 const images = new Map();
@@ -70,6 +71,8 @@ function syncSettings() {
 }
 function openedPlan(message, { save = true } = {}) {
   $('battle-picker-dialog').close();
+  $('battle-zone-details-dialog').close('plan');
+  zoneDetails = null;
   selectedPlayer = null; cancelDrag(); selectedZone = map().zones[0].id; lastDraw = null;
   poolOnly = true;
   $('battle-search').value = ''; $('battle-map-scroll').scrollTo(0, 0);
@@ -238,11 +241,13 @@ function playerButton(player, sourceZone = null) {
 }
 
 function fitPickerViewport() {
-  if (!$('battle-picker-dialog').open) return;
   const viewport = window.visualViewport;
-  $('battle-picker-dialog').classList.toggle('compact-picker', (viewport?.height ?? window.innerHeight) < 540);
-  $('battle-picker-dialog').style.setProperty('--picker-height', (viewport?.height ?? window.innerHeight) + 'px');
-  $('battle-picker-dialog').style.setProperty('--picker-top', (viewport?.offsetTop ?? 0) + 'px');
+  for (const dialog of [$('battle-picker-dialog'), $('battle-zone-details-dialog')]) {
+    if (!dialog.open) continue;
+    dialog.classList.toggle('compact-picker', (viewport?.height ?? window.innerHeight) < 540);
+    dialog.style.setProperty('--picker-height', (viewport?.height ?? window.innerHeight) + 'px');
+    dialog.style.setProperty('--picker-top', (viewport?.offsetTop ?? 0) + 'px');
+  }
 }
 function openPicker(zoneId) {
   const zone = map().zones.find(zone => zone.id === zoneId);
@@ -331,6 +336,7 @@ function animateDrag() {
   dragFrame = requestAnimationFrame(animateDrag);
 }
 document.addEventListener('pointerdown', event => {
+  if (event.target.closest('#battle-zone-details-dialog')) return;
   suppressDragClick = false;
   const source = event.target.closest('.battle-player, .battle-chip-name');
   if (!source || event.button !== 0 || !event.isPrimary || (event.pointerType === 'touch' && !source.matches('.battle-chip-name') && !event.target.closest('.battle-drag-grip'))) return;
@@ -404,6 +410,95 @@ function powerDescription(player) {
   return player.id === ALLIES.id ? 'Allies power is unknown' : formatBattlePower(player.power) === '—' ? 'Power unavailable' : 'Power ' + formatBattlePower(player.power, true);
 }
 
+function openZoneDetails(zoneId) {
+  cancelDrag();
+  zoneDetails = { zoneId, planId: plan().id, mapId: state.selectedMap };
+  selectedZone = zoneId;
+  renderTeam(); renderZoneDetails();
+  $('battle-zone-details-dialog').returnValue = '';
+  $('battle-zone-details-dialog').showModal(); fitPickerViewport();
+  $('battle-zone-details-title').focus({ preventScroll: true });
+}
+
+function renderZoneDetails() {
+  if (!zoneDetails) return;
+  const { zoneId, planId, mapId } = zoneDetails;
+  if (planId !== plan().id || mapId !== state.selectedMap) {
+    $('battle-zone-details-dialog').close(); zoneDetails = null; return;
+  }
+  const zone = map().zones.find(zone => zone.id === zoneId);
+  const ids = plan().assignments[zoneId] ?? [];
+  const list = $('battle-zone-details-list');
+  const focused = list.contains(document.activeElement) ? document.activeElement : null;
+  const focusClass = ['battle-role-toggle', 'battle-chip-remove', 'battle-chip-name'].find(name => focused?.classList.contains(name));
+  const focusIndex = focusClass ? [...list.querySelectorAll('.' + focusClass)].indexOf(focused) : -1;
+  const scrollTop = list.parentElement.scrollTop;
+  $('battle-zone-details-title').textContent = zone.name;
+  $('battle-zone-details-summary').textContent = state.showPower ? battleZonePowerLabel(battleZonePower(plan(), zoneId)) : ids.length + ' assigned';
+  $('battle-zone-details-empty').hidden = ids.length > 0;
+  list.replaceChildren(...ids.map(id => playerChip(battlePlayer(plan(), id), zone, { expanded: true })));
+  list.parentElement.scrollTop = scrollTop;
+  if (focused) {
+    const buttons = [...list.querySelectorAll('.' + focusClass)];
+    const next = buttons.find(button => button.dataset.playerId === focused.dataset.playerId) ?? buttons[Math.min(focusIndex, buttons.length - 1)] ?? $('battle-zone-details-add');
+    next.focus({ preventScroll: true });
+  }
+}
+
+function fitZoneTokens() {
+  // Measure actual wrapped rows, including touch controls and long names.
+  // Only whole rows stay on the map; the full team remains available in a dialog.
+  for (const zone of $('battle-zones').children) {
+    const list = zone.querySelector('.battle-zone-players');
+    if (!list) continue;
+    const chips = [...list.children];
+    chips.forEach(chip => { chip.hidden = false; });
+    const bounds = list.getBoundingClientRect();
+    const rects = chips.map(chip => chip.getBoundingClientRect());
+    const overflow = rects.find(rect => rect.bottom > bounds.bottom - 2 + .5);
+    chips.forEach((chip, index) => { chip.hidden = Boolean(overflow && rects[index].top >= overflow.top - .5); });
+    const hiddenCount = chips.filter(chip => chip.hidden).length;
+    const more = zone.querySelector('.battle-zone-more');
+    more.hidden = hiddenCount === 0;
+    more.textContent = '+' + hiddenCount + ' more';
+    more.setAttribute('aria-label', 'View all ' + chips.length + ' names in ' + map().zones.find(item => item.id === zone.dataset.zone).name);
+  }
+}
+
+function zoneFocusTarget(zoneId) {
+  const zone = [...$('battle-zones').children].find(zone => zone.dataset.zone === zoneId);
+  return ['.battle-zone-more', '.battle-zone-add', '.battle-zone-target']
+    .map(selector => zone?.querySelector(selector)).find(button => button && !button.hidden);
+}
+
+function playerChip(player, zone, { expanded = false } = {}) {
+  const chip = make('li', 'battle-chip');
+  chip.classList.toggle('is-reserve', player.reserve === true);
+  if (player.id !== ALLIES.id) chip.append(roleToggle(player, { compact: true, sourceZone: zone.id }));
+  const name = make('button', 'battle-chip-name'); name.type = 'button';
+  name.append(make('span', 'battle-chip-label', player.name));
+  if (state.showPower && player.id !== ALLIES.id) name.append(make('span', 'battle-chip-power', formatBattlePower(player.power)));
+  name.dataset.playerId = player.id; name.setAttribute('aria-label', 'Select ' + player.name);
+  name.setAttribute('aria-description', powerDescription(player));
+  name.dataset.sourceZone = zone.id;
+  name.setAttribute('aria-pressed', String(selectedPlayer === player.id && selectedFromZone === zone.id)); name.title = player.name + ' · ' + powerDescription(player) + (expanded ? ' · Select to move' : ' · Drag or select to move');
+  name.addEventListener('click', () => {
+    if (expanded) $('battle-zone-details-dialog').close('move');
+    choosePlayer(player.id, zone.id);
+  });
+  const remove = make('button', 'battle-chip-remove'); remove.type = 'button'; remove.dataset.playerId = player.id;
+  const label = 'Remove ' + player.name + ' from ' + zone.name; remove.setAttribute('aria-label', label); remove.title = label;
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) icon.setAttribute(key, value);
+  const circle = document.createElementNS(icon.namespaceURI, 'circle');
+  circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '9');
+  const cross = document.createElementNS(icon.namespaceURI, 'path'); cross.setAttribute('d', 'M9 9l6 6M15 9l-6 6');
+  icon.append(circle, cross); remove.append(icon);
+  remove.addEventListener('click', () => assign(player.id, null, zone.id));
+  chip.append(name, remove);
+  return chip;
+}
+
 function zoneControl(zone, canvas, snapshot) {
   const container = make('div', 'battle-zone');
   container.dataset.zone = zone.id;
@@ -422,14 +517,18 @@ function zoneControl(zone, canvas, snapshot) {
   container.append(target);
   if (state.showPower && zone.names.length) {
     container.classList.add('has-power');
-    const power = battleZonePowerLabel(battleZonePower(snapshot, zone.id));
-    const summary = make('span', 'battle-zone-power', power);
+    const totals = battleZonePower(snapshot, zone.id);
+    const power = battleZonePowerLabel(totals);
+    const partial = totals.total !== null && (totals.missingCount || totals.allies) ? '+' : '';
+    const count = totals.playerCount ? totals.playerCount + (totals.playerCount === 1 ? ' player' : ' players') : 'Allies';
+    const summary = make('span', 'battle-zone-power', formatBattlePower(totals.total) + partial + ' · ' + count);
+    summary.setAttribute('aria-label', power);
     summary.title = 'Assigned power · ' + power;
     target.setAttribute('aria-label', zone.name + ', ' + power);
     container.append(summary);
   }
   container.addEventListener('click', event => {
-    if (event.target.closest('.battle-chip, .battle-zone-add')) return;
+    if (event.target.closest('.battle-chip, .battle-zone-actions')) return;
     if (selectedPlayer) assign(selectedPlayer, zone.id, selectedFromZone);
     else openPicker(zone.id);
   });
@@ -438,33 +537,16 @@ function zoneControl(zone, canvas, snapshot) {
     for (const id of snapshot.assignments[zone.id] ?? []) {
       const player = battlePlayer(snapshot, id);
       if (!player) continue;
-      const chip = make('li', 'battle-chip');
-      chip.classList.toggle('is-reserve', player.reserve === true);
-      if (player.id !== ALLIES.id) chip.append(roleToggle(player, { compact: true, sourceZone: zone.id }));
-      const name = make('button', 'battle-chip-name'); name.type = 'button';
-      name.append(make('span', 'battle-chip-label', player.name));
-      if (state.showPower && player.id !== ALLIES.id) name.append(make('span', 'battle-chip-power', formatBattlePower(player.power)));
-      name.dataset.playerId = id; name.setAttribute('aria-label', 'Select ' + player.name);
-      name.setAttribute('aria-description', powerDescription(player));
-      name.dataset.sourceZone = zone.id;
-      name.setAttribute('aria-pressed', String(selectedPlayer === id && selectedFromZone === zone.id)); name.title = player.name + ' · ' + powerDescription(player) + ' · Drag or select to move';
-      name.addEventListener('click', () => choosePlayer(id, zone.id));
-      const remove = make('button', 'battle-chip-remove'); remove.type = 'button'; remove.dataset.playerId = id;
-      const label = 'Remove ' + player.name + ' from ' + zone.name; remove.setAttribute('aria-label', label); remove.title = label;
-      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      for (const [key, value] of Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'aria-hidden': 'true', focusable: 'false' })) icon.setAttribute(key, value);
-      const circle = document.createElementNS(icon.namespaceURI, 'circle');
-      circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '9');
-      const cross = document.createElementNS(icon.namespaceURI, 'path'); cross.setAttribute('d', 'M9 9l6 6M15 9l-6 6');
-      icon.append(circle, cross); remove.append(icon);
-      remove.addEventListener('click', () => assign(id, null, zone.id));
-      chip.append(name, remove); list.append(chip);
+      list.append(playerChip(player, zone));
     }
-    const addItem = make('li', 'battle-zone-add-item');
+    const actions = make('div', 'battle-zone-actions');
+    const more = make('button', 'battle-zone-more'); more.type = 'button'; more.hidden = true;
+    more.setAttribute('aria-haspopup', 'dialog');
+    more.addEventListener('click', () => openZoneDetails(zone.id));
     const add = make('button', 'battle-zone-add', '+ Names'); add.type = 'button';
     add.setAttribute('aria-label', 'Add names to ' + zone.name); add.setAttribute('aria-haspopup', 'dialog');
     add.addEventListener('click', () => openPicker(zone.id));
-    addItem.append(add); list.append(addItem); container.append(list);
+    actions.append(more, add); container.append(list, actions);
   }
   return container;
 }
@@ -476,9 +558,8 @@ async function renderMap() {
   const snapshot = structuredClone(plan());
   const focused = document.activeElement;
   const focusZone = focused.closest('.battle-zone')?.dataset.zone;
-  const focusClass = ['battle-role-toggle', 'battle-chip-remove', 'battle-chip-name', 'battle-zone-add', 'battle-zone-target'].find(name => focused.classList.contains(name)) ?? 'battle-zone-target';
+  const focusClass = ['battle-role-toggle', 'battle-chip-remove', 'battle-chip-name', 'battle-zone-add', 'battle-zone-more', 'battle-zone-target'].find(name => focused.classList.contains(name)) ?? 'battle-zone-target';
   const focusIndex = focusZone ? [...focused.closest('.battle-zone').querySelectorAll('.' + focusClass)].indexOf(focused) : -1;
-  const zoneScroll = new Map([...$('battle-zones').children].map(zone => [zone.dataset.zone, zone.querySelector('.battle-zone-players')?.scrollTop ?? 0]));
   $('battle-export').disabled = true;
   $('battle-map-stage').setAttribute('aria-busy', 'true');
   try {
@@ -489,15 +570,12 @@ async function renderMap() {
     canvas.width = lastDraw.canvas.width; canvas.height = lastDraw.canvas.height;
     canvas.getContext('2d').drawImage(lastDraw.canvas, 0, 0);
     $('battle-zones').replaceChildren(...lastDraw.zones.map(zone => zoneControl(zone, canvas, snapshot)));
-    for (const zone of $('battle-zones').children) {
-      const list = zone.querySelector('.battle-zone-players');
-      if (list) list.scrollTop = zoneScroll.get(zone.dataset.zone) ?? 0;
-    }
+    fitZoneTokens();
     if (focusZone && document.activeElement === document.body) {
       const zone = [...$('battle-zones').children].find(node => node.dataset.zone === focusZone);
       const buttons = [...(zone?.querySelectorAll('.' + focusClass) ?? [])];
       const next = buttons.find(button => button.dataset.playerId === focused.dataset.playerId) ?? buttons[Math.min(focusIndex, buttons.length - 1)] ?? zone?.querySelector('.battle-zone-target');
-      next?.focus({ preventScroll: true });
+      (next?.closest('[hidden]') ? zoneFocusTarget(focusZone) : next)?.focus({ preventScroll: true });
     }
     $('battle-overflow').hidden = !lastDraw.overflow.length;
     $('battle-overflow-text').textContent = 'Names need more room in ' + lastDraw.overflow.map(zone => zone.name).join(', ') + '. Move some players to another zone before exporting.';
@@ -516,11 +594,23 @@ function render() {
   const unlinked = unlinkedPlayers().length;
   $('battle-link-players').hidden = !unlinked || !rosterCandidates().length;
   $('battle-link-players').textContent = 'Link player data · ' + unlinked;
-  renderPlayers(); renderTeam(); selection(); renderMap();
+  renderPlayers(); renderTeam(); renderZoneDetails(); selection(); renderMap();
   rosterUpdater?.render();
 }
 
 $('battle-team-add').addEventListener('click', () => openPicker(selectedZone));
+$('battle-zone-details-close').addEventListener('click', () => $('battle-zone-details-dialog').close());
+$('battle-zone-details-dialog').addEventListener('close', () => {
+  const dialog = $('battle-zone-details-dialog');
+  if (dialog.open) return;
+  if (!dialog.returnValue && zoneDetails) zoneFocusTarget(zoneDetails.zoneId)?.focus({ preventScroll: true });
+  zoneDetails = null;
+});
+$('battle-zone-details-add').addEventListener('click', () => {
+  const zoneId = zoneDetails?.zoneId;
+  $('battle-zone-details-dialog').close('picker');
+  if (zoneId) openPicker(zoneId);
+});
 for (const id of ['battle-picker-close', 'battle-picker-cancel']) $(id).addEventListener('click', () => $('battle-picker-dialog').close());
 $('battle-picker-dialog').addEventListener('close', () => { if (!$('battle-picker-dialog').open) picker = null; });
 $('battle-picker-search').addEventListener('input', renderPicker);
@@ -546,6 +636,8 @@ $('battle-picker-form').addEventListener('submit', event => {
 window.visualViewport?.addEventListener('resize', fitPickerViewport);
 window.visualViewport?.addEventListener('scroll', fitPickerViewport);
 window.addEventListener('resize', fitPickerViewport);
+window.addEventListener('resize', fitZoneTokens);
+document.fonts.ready.then(fitZoneTokens);
 
 $('battle-map').addEventListener('change', () => {
   state = selectBattlePlan(state, $('battle-map').value);
